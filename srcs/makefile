@@ -10,7 +10,7 @@ NOFWD_SRCS = main.cpp processor.cpp no_forwarding.cpp instruction.cpp register_f
 NOFWD_OBJS = $(NOFWD_SRCS:.cpp=.o)
 
 # Sources for the forwarding variant (if implemented)
-FORWARD_SRCS = main.cpp processor.cpp forwarding.cpp instruction.cpp register_file.cpp memory.cpp alu.cpp
+FORWARD_SRCS = main_forward.cpp processor.cpp forwarding.cpp instruction.cpp register_file.cpp memory.cpp alu.cpp
 FORWARD_OBJS = $(FORWARD_SRCS:.cpp=.o)
 
 .PHONY: all clean noforward forward
@@ -19,13 +19,17 @@ FORWARD_OBJS = $(FORWARD_SRCS:.cpp=.o)
 all: noforward forward
 
 # Build the non-forwarding executable (noforward)
-noforward: $(NOFWD_OBJS)
-	$(CXX) $(CXXFLAGS) -o noforward $(NOFWD_OBJS) $(LDFLAGS)
+noforward: main.o processor.o no_forwarding.o instruction.o register_file.o memory.o alu.o
+	$(CXX) $(CXXFLAGS) -o noforward main.o processor.o no_forwarding.o instruction.o register_file.o memory.o alu.o
+
+# For the forwarding version (using main_forward.cpp)
+main_forward.o: main_forward.cpp
+	$(CXX) $(CXXFLAGS) -c main_forward.cpp -o main_forward.o
 
 # Build forwarding executable only if forwarding.cpp exists
 ifneq ($(wildcard forwarding.cpp),)
-forward: $(FORWARD_OBJS)
-	$(CXX) $(CXXFLAGS) -o forward $(FORWARD_OBJS) $(LDFLAGS)
+forward: main_forward.o processor.o forwarding.o instruction.o register_file.o memory.o alu.o
+	$(CXX) $(CXXFLAGS) -o forward main_forward.o processor.o forwarding.o instruction.o register_file.o memory.o alu.o
 else
 forward:
 	@echo "Forward variant not implemented: forwarding.cpp not found."

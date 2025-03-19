@@ -1,0 +1,4 @@
+# Simple test with just a few instructions
+0x00000000 0x00100093  # addi x1, x0, 1    # Set x1 = 1
+0x00000004 0x00200113  # addi x2, x0, 2    # Set x2 = 2
+0x00000008 0x002081b3  # add x3, x1, x2    # Set x3 = x1 + x2 = 3

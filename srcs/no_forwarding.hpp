@@ -15,17 +15,16 @@ private:
     // Hazard detection
     bool detectDataHazard() const;
     
-    // No need to redefine pipeline history structure here
-    // as we're inheriting it from the Processor class
-    
-    // For compatibility with the updated implementation:
-    void printPipelineDiagram();
-    
     // Count of instructions that completed execution
     int executed_instructions = 0;
     
 public:
     NoForwardingProcessor();
+    // Add constructor that takes instructions
+    NoForwardingProcessor(const std::vector<uint32_t>& instructions);
+    
+    // Move to public section
+    void printPipelineDiagram();
     
     // Execute one cycle
     void step() override;

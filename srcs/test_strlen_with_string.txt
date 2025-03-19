@@ -1,0 +1,19 @@
+0x00000000 0x00000517  # la a0, test_string (auipc a0, 0)
+0x00000004 0x01850513  # addi a0, a0, 24   # Adjust offset to test_string
+0x00000008 0x00c000ef  # call strlen
+0x0000000c 0x00a00893  # li a7, 10         # syscall number for exit
+0x00000010 0x00000073  # ecall             # make syscall
+
+0x00000014 0x00000293  # li t0, 0          # i = 0
+0x00000018 0x00a28333  # add t1, t0, a0    # Add the byte offset for str[i]
+0x0000001c 0x00030303  # lb t1, 0(t1)      # Dereference str[i]
+0x00000020 0x00030c63  # beqz t1, 1f       # if str[i] == 0, break for loop
+0x00000024 0x00128293  # addi t0, t0, 1    # Add 1 to our iterator
+0x00000028 0xff9ff06f  # j 1b              # Jump back to condition (1 backwards)
+0x0000002c 0x00028513  # mv a0, t0         # Move t0 into a0 to return
+0x00000030 0x00008067  # ret               # Return back via the return address register
+
+0x00000034 0x6c6c6548  # "Hell"
+0x00000038 0x52202c6f  # "o, R"
+0x0000003c 0x2d435349  # "ISC-"
+0x00000040 0x0021562d  # "V!\0"

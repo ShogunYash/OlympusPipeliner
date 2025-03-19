@@ -43,6 +43,7 @@ void Processor::record_pipeline_state() {
         }
     };
 
+    // Record stages from all pipeline registers
     // Record IF stage
     if (if_id.valid) {
         Instruction instr(if_id.instruction);
@@ -67,10 +68,59 @@ void Processor::record_pipeline_state() {
 }
 
 void Processor::run(int cycles) {
-    for (int i = 0; i < cycles && running; i++) {
+    int num_cycles = 0;
+    bool had_activity = false;
+    
+    // Add debugging to see what's happening
+    std::cout << "Starting simulation..." << std::endl;
+    
+    // Run until program naturally completes
+    while (running || if_id.valid || id_ex.valid || ex_mem.valid || mem_wb.valid) {
+        // Print debug info
+        std::cout << "Cycle " << num_cycles + 1 << ": PC=" << std::hex << pc << std::dec;
+        std::cout << " IF:" << (if_id.valid ? "valid" : "invalid");
+        std::cout << " ID:" << (id_ex.valid ? "valid" : "invalid");
+        std::cout << " EX:" << (ex_mem.valid ? "valid" : "invalid");
+        std::cout << " MEM:" << (mem_wb.valid ? "valid" : "invalid") << std::endl;
+        
+        // Execute one pipeline cycle
         step();
+        
+        // Record pipeline state for visualization
         record_pipeline_state();
+        
+        had_activity = true;
+        num_cycles++;
+        
+        // Exit conditions
+        if (!running && !if_id.valid && !id_ex.valid && !ex_mem.valid && !mem_wb.valid) {
+            std::cout << "Program completed normally after " << num_cycles << " cycles." << std::endl;
+            break;
+        }
+        
+        // Prevent infinite loops
+        if (num_cycles >= 100) {
+            std::cout << "Reached maximum cycle limit (100). Stopping." << std::endl;
+            break;
+        }
+        
+        // User-specified limit
+        if (cycles > 0 && num_cycles >= cycles) {
+            std::cout << "Reached user-specified cycle limit (" << cycles << "). Stopping." << std::endl;
+            break;
+        }
+        
+        // Check for lack of progress
+        if (!had_activity) {
+            std::cout << "Simulation stalled with no activity. Stopping." << std::endl;
+            break;
+        }
+        
+        // Reset activity flag for next cycle
+        had_activity = false;
     }
+    
+    std::cout << "Simulation ended after " << num_cycles << " cycles." << std::endl;
 }
 
 void Processor::displayPipeline() const {

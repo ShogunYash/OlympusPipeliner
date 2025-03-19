@@ -5,6 +5,11 @@
 
 NoForwardingProcessor::NoForwardingProcessor() : Processor() {}
 
+// Add the new constructor implementation
+NoForwardingProcessor::NoForwardingProcessor(const std::vector<uint32_t>& instructions) : Processor() {
+    loadProgram(instructions);
+}
+
 bool NoForwardingProcessor::detectDataHazard() const {
     if (!if_id.valid) return false;
     
@@ -42,7 +47,7 @@ void NoForwardingProcessor::fetch() {
     
     if (!detectDataHazard()) {
         // Check if we're within program bounds
-        if (pc < program.size() * 4) {
+        if (pc < program.size() * 4) {  // This is correct for byte addressing
             // Read instruction from memory
             uint32_t instruction = memory.readWord(pc);
             
@@ -53,16 +58,16 @@ void NoForwardingProcessor::fetch() {
             if_id.stage_display = "IF";
             
             // Update PC
-            pc += 4;
+            pc += 4;  // This is correct for byte addressing
         } else {
             if_id.valid = false;
-            running = false;
+            running = false;  // This should stop execution
         }
     } else {
         // Stall due to data hazard
         if_id.stage_display = "-";
     }
-}
+} // Added missing closing brace here
 
 void NoForwardingProcessor::decode() {
     if (!if_id.valid) {
@@ -151,14 +156,51 @@ void NoForwardingProcessor::execute() {
     int32_t alu_input_1 = id_ex.read_data_1;
     int32_t alu_input_2 = id_ex.alu_src ? id_ex.immediate : id_ex.read_data_2;
     
-    // Execute ALU operation
-    // Fixed: Get operation from the instruction stored in id_ex, not from alu_src boolean
-    Instruction instr(if_id.instruction); // This is wrong, we need to derive from id_ex
+    // Execute ALU operation based on instruction type and opcode
+    // Instead of trying to decode from assembly string, use the instruction directly
+    Operation op = Operation::ADD; // Default to ADD
     
-    // We need to use the operation stored in id_ex or re-decode the instruction
-    // For now, let's use a dummy operation ADD as a placeholder
-    // In a real implementation, we would properly decode or store the operation in ID stage
-    Operation op = Operation::ADD;
+    // Re-decode the instruction
+    if (id_ex.assembly.find("add") == 0) op = Operation::ADD;
+    else if (id_ex.assembly.find("sub") == 0) op = Operation::SUB;
+    else if (id_ex.assembly.find("and") == 0) op = Operation::AND;
+    else if (id_ex.assembly.find("or") == 0) op = Operation::OR;
+    else if (id_ex.assembly.find("xor") == 0) op = Operation::XOR;
+    else if (id_ex.assembly.find("slt") == 0) op = Operation::SLT;
+    else if (id_ex.assembly.find("sltu") == 0) op = Operation::SLTU;
+    else if (id_ex.assembly.find("sll") == 0) op = Operation::SLL;
+    else if (id_ex.assembly.find("srl") == 0) op = Operation::SRL;
+    else if (id_ex.assembly.find("sra") == 0) op = Operation::SRA;
+    else if (id_ex.assembly.find("beq") == 0) op = Operation::BEQ;
+    else if (id_ex.assembly.find("bne") == 0) op = Operation::BNE;
+    else if (id_ex.assembly.find("blt") == 0) op = Operation::BLT;
+    else if (id_ex.assembly.find("bge") == 0) op = Operation::BGE;
+    else if (id_ex.assembly.find("bltu") == 0) op = Operation::BLTU;
+    else if (id_ex.assembly.find("bgeu") == 0) op = Operation::BGEU;
+    else if (id_ex.assembly.find("lb") == 0) op = Operation::LB;
+    else if (id_ex.assembly.find("lh") == 0) op = Operation::LH;
+    else if (id_ex.assembly.find("lw") == 0) op = Operation::LW;
+    else if (id_ex.assembly.find("sb") == 0) op = Operation::SB;
+    else if (id_ex.assembly.find("sh") == 0) op = Operation::SH;
+    else if (id_ex.assembly.find("sw") == 0) op = Operation::SW;
+    else if (id_ex.assembly.find("jal") == 0) op = Operation::JAL;
+    else if (id_ex.assembly.find("jalr") == 0) op = Operation::JALR;
+    else if (id_ex.assembly.find("lui") == 0) op = Operation::ADD;
+    else if (id_ex.assembly.find("auipc") == 0) op = Operation::ADD;
+    else if (id_ex.assembly.find("mv") == 0) op = Operation::ADD;
+    else if (id_ex.assembly.find("li") == 0) op = Operation::ADD;
+    else if (id_ex.assembly.find("ret") == 0) op = Operation::JALR;
+    else if (id_ex.assembly.find("j") == 0) op = Operation::JAL;
+    else if (id_ex.assembly.find("addi") == 0) op = Operation::ADD;
+    else if (id_ex.assembly.find("andi") == 0) op = Operation::AND;
+    else if (id_ex.assembly.find("ori") == 0) op = Operation::OR;
+    else if (id_ex.assembly.find("xori") == 0) op = Operation::XOR;
+    else if (id_ex.assembly.find("slti") == 0) op = Operation::SLT;
+    else if (id_ex.assembly.find("sltiu") == 0) op = Operation::SLTU;
+    else if (id_ex.assembly.find("slli") == 0) op = Operation::SLL;
+    else if (id_ex.assembly.find("srli") == 0) op = Operation::SRL;
+    else if (id_ex.assembly.find("srai") == 0) op = Operation::SRA;
+    
     int32_t alu_result = ALU::execute(op, alu_input_1, alu_input_2, id_ex.pc);
     
     // Update EX/MEM register
@@ -182,11 +224,11 @@ void NoForwardingProcessor::memory_access() {
     
     // Memory operations
     if (ex_mem.mem_read) {
-        // Load operation
-        mem_wb.read_data = data_memory[ex_mem.alu_result];
+        // Load operation - Fix using memory class methods
+        mem_wb.read_data = memory.readWord(ex_mem.alu_result);
     } else if (ex_mem.mem_write) {
-        // Store operation
-        data_memory[ex_mem.alu_result] = ex_mem.write_data;
+        // Store operation - Fix using memory class methods
+        memory.writeWord(ex_mem.alu_result, ex_mem.write_data);
     }
     
     // Update MEM/WB register

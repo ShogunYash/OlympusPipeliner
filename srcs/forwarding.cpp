@@ -3,7 +3,9 @@
 #include <iostream>
 #include <iomanip>
 
-ForwardingProcessor::ForwardingProcessor(const std::vector<uint32_t>& program) : Processor(program) {}
+ForwardingProcessor::ForwardingProcessor(const std::vector<uint32_t>& program) : Processor() {
+    loadProgram(program);
+}
 
 bool ForwardingProcessor::detectLoadUseHazard() const {
     if (!if_id.valid) return false;
@@ -227,8 +229,51 @@ void ForwardingProcessor::execute() {
         }
     }
     
-    // Execute ALU operation
-    Operation op = static_cast<Operation>(id_ex.alu_op);
+    // Execute ALU operation - improve operation detection
+    Operation op = Operation::ADD; // Default operation
+    std::string assembly = id_ex.assembly;
+    
+    if (assembly.find("add") == 0 && assembly.find("addi") != 0) op = Operation::ADD;
+    else if (assembly.find("addi") == 0) op = Operation::ADD;
+    else if (assembly.find("sub") == 0) op = Operation::SUB;
+    else if (assembly.find("and") == 0 && assembly.find("andi") != 0) op = Operation::AND;
+    else if (assembly.find("andi") == 0) op = Operation::AND;
+    else if (assembly.find("or") == 0 && assembly.find("ori") != 0) op = Operation::OR;
+    else if (assembly.find("ori") == 0) op = Operation::OR;
+    else if (assembly.find("xor") == 0 && assembly.find("xori") != 0) op = Operation::XOR;
+    else if (assembly.find("xori") == 0) op = Operation::XOR;
+    else if (assembly.find("slt") == 0 && assembly.find("sltu") != 0 && assembly.find("slti") != 0) op = Operation::SLT;
+    else if (assembly.find("slti") == 0) op = Operation::SLT;
+    else if (assembly.find("sltu") == 0) op = Operation::SLTU;
+    else if (assembly.find("sll") == 0 && assembly.find("slli") != 0) op = Operation::SLL;
+    else if (assembly.find("slli") == 0) op = Operation::SLL;
+    else if (assembly.find("srl") == 0 && assembly.find("srli") != 0) op = Operation::SRL;
+    else if (assembly.find("srli") == 0) op = Operation::SRL;
+    else if (assembly.find("sra") == 0 && assembly.find("srai") != 0) op = Operation::SRA;
+    else if (assembly.find("srai") == 0) op = Operation::SRA;
+    else if (assembly.find("lui") == 0) op = Operation::ADD; // lui just loads immediate
+    else if (assembly.find("auipc") == 0) op = Operation::ADD; // auipc adds to PC
+    else if (assembly.find("jal") == 0) op = Operation::ADD; // jal computes return address as PC+4
+    else if (assembly.find("jalr") == 0) op = Operation::ADD; // jalr computes return address as PC+4
+    else if (assembly.find("beq") == 0) op = Operation::BEQ;
+    else if (assembly.find("bne") == 0) op = Operation::BNE;
+    else if (assembly.find("blt") == 0) op = Operation::BLT;
+    else if (assembly.find("bge") == 0) op = Operation::BGE;
+    else if (assembly.find("bltu") == 0) op = Operation::BLTU;
+    else if (assembly.find("bgeu") == 0) op = Operation::BGEU;
+    else if (assembly.find("lb") == 0) op = Operation::ADD; // Address calculation for load
+    else if (assembly.find("lh") == 0) op = Operation::ADD; // Address calculation for load
+    else if (assembly.find("lw") == 0) op = Operation::ADD; // Address calculation for load
+    else if (assembly.find("lbu") == 0) op = Operation::ADD; // Address calculation for load
+    else if (assembly.find("lhu") == 0) op = Operation::ADD; // Address calculation for load
+    else if (assembly.find("sb") == 0) op = Operation::ADD; // Address calculation for store
+    else if (assembly.find("sh") == 0) op = Operation::ADD; // Address calculation for store
+    else if (assembly.find("sw") == 0) op = Operation::ADD; // Address calculation for store
+    else if (assembly.find("mv") == 0) op = Operation::ADD; // mv is an alias for addi rd, rs, 0
+    else if (assembly.find("j") == 0) op = Operation::ADD; // j is an alias for jal x0, offset
+    else if (assembly.find("li") == 0) op = Operation::ADD; // li loads immediate
+    else if (assembly.find("ret") == 0) op = Operation::ADD; // ret is an alias for jalr x0, x1, 0
+    
     int32_t alu_result = ALU::execute(op, alu_input_1, alu_input_2, id_ex.pc);
     
     // Update EX/MEM register
@@ -306,7 +351,9 @@ void ForwardingProcessor::run(int cycle_count) {
     pipeline_history.clear();
     executed_instructions = 0;
     
-    for (int i = 0; i < cycle_count && running; i++) {
+    // Run until program naturally completes
+    // (all instructions processed and pipeline is empty)
+    while (running || if_id.valid || id_ex.valid || ex_mem.valid || mem_wb.valid) {
         // Execute one cycle
         step();
         
@@ -338,7 +385,15 @@ void ForwardingProcessor::run(int cycle_count) {
         
         // Add this cycle's state to history
         pipeline_history.push_back(current_state);
+        
+        if (cycle_count > 0 && pipeline_history.size() >= (size_t)cycle_count) {
+            // Only enforce cycle limit if explicitly specified
+            break;
+        }
     }
+    
+    // Report completion
+    std::cout << "Program completed after " << pipeline_history.size() << " cycles." << std::endl;
 }
 
 void ForwardingProcessor::printPipelineDiagram() {

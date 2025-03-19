@@ -3,7 +3,7 @@
 #include <vector>
 #include <string>
 #include <sstream>
-#include "no_forwarding.hpp"
+#include "forwarding.hpp"
 
 // Function to load instructions from file.
 // Each line should contain two fields separated by whitespace:
@@ -19,14 +19,8 @@ std::vector<uint32_t> loadInstructionsFromFile(const std::string& filename) {
     
     std::string line;
     while (std::getline(file, line)) {
-        // Skip empty lines and comments
-        if (line.empty() || line[0] == '#') continue;
-        
-        // Remove any comments from the line
-        size_t comment_pos = line.find('#');
-        if (comment_pos != std::string::npos) {
-            line = line.substr(0, comment_pos);
-        }
+        // Skip empty lines
+        if (line.empty()) continue;
         
         std::istringstream iss(line);
         std::string address, hex_instr;
@@ -71,10 +65,10 @@ int main(int argc, char* argv[]) {
         return 1;
     }
     
-    // Create an instance of the no-forwarding processor simulator.
-    NoForwardingProcessor simulator(instructions);
+    // Create an instance of the forwarding processor simulator.
+    ForwardingProcessor simulator(instructions);
     
-    // Run the simulation until natural completion or specified cycle count
+    // Run the simulation for the specified number of cycles.
     simulator.run(cycleCount);
     
     // Output the pipeline diagram to stdout.
