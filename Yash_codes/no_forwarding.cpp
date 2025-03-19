@@ -204,6 +204,42 @@ void NoForwardingProcessor::write_back() {
     mem_wb.stage_display = "WB";
 }
 
+void NoForwardingProcessor::printPipelineDiagram() {
+    std::cout << "Pipeline Execution Diagram\n";
+    std::cout << "-------------------------\n";
+    std::cout << "Cycle | Instruction                   | IF | ID | EX | MEM | WB\n";
+    std::cout << "---------------------------------------------------------------------\n";
+    
+    // Print the pipeline history from recorded data
+    for (size_t i = 0; i < pipeline_history.size(); i++) {
+        std::cout << std::setw(5) << (i+1) << " | ";
+        
+        // Print each instruction and its progress through the pipeline
+        for (size_t j = 0; j < pipeline_history[i].size(); j++) {
+            const auto& instr_state = pipeline_history[i][j];
+            
+            if (j == 0) {
+                // Print instruction mnemonic for the first entry
+                std::cout << std::left << std::setw(30) << instr_state.assembly << " | ";
+            }
+            
+            // Print stage symbols (IF, ID, EX, MEM, WB or stall indicator)
+            std::cout << std::setw(2) << instr_state.stage << " | ";
+        }
+        std::cout << std::endl;
+    }
+    
+    std::cout << "---------------------------------------------------------------------\n";
+    std::cout << "Total Cycles: " << pipeline_history.size() << std::endl;
+    std::cout << "Total Instructions Executed: " << executed_instructions << std::endl;
+    
+    // Calculate CPI (Cycles Per Instruction)
+    if (executed_instructions > 0) {
+        double cpi = static_cast<double>(pipeline_history.size()) / executed_instructions;
+        std::cout << "CPI: " << std::fixed << std::setprecision(2) << cpi << std::endl;
+    }
+}
+
 void NoForwardingProcessor::step() {
     // Execute pipeline stages in reverse order to avoid overwriting
     write_back();
