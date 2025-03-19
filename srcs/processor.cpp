@@ -21,71 +21,48 @@ void Processor::loadProgram(const std::vector<uint32_t>& instructions) {
 }
 
 void Processor::record_pipeline_state() {
-    // Record IF stage
-    if (if_id.valid) {
-        Instruction instr(if_id.instruction);
-        std::string assembly = instr.getAssembly();
+    // Helper function to record a stage
+    auto record_stage = [this](const std::string& assembly, const std::string& stage_display) {
+        if (assembly.empty()) return;
         
         bool found = false;
         for (auto& entry : pipeline_history) {
             if (entry.first == assembly) {
-                entry.second.push_back(if_id.stage_display);
+                // Check if we need to add more stages
+                while (entry.second.size() < pipeline_history.size()) {
+                    entry.second.push_back(" ");
+                }
+                entry.second.push_back(stage_display);
                 found = true;
                 break;
             }
         }
         
         if (!found) {
-            pipeline_history.push_back({assembly, {if_id.stage_display}});
+            pipeline_history.push_back({assembly, {stage_display}});
         }
+    };
+
+    // Record IF stage
+    if (if_id.valid) {
+        Instruction instr(if_id.instruction);
+        std::string assembly = instr.getAssembly();
+        record_stage(assembly, if_id.stage_display);
     }
     
     // Record ID stage
     if (id_ex.valid) {
-        bool found = false;
-        for (auto& entry : pipeline_history) {
-            if (entry.first == id_ex.assembly) {
-                // Check if we need to add more stages
-                while (entry.second.size() < pipeline_history.size()) {
-                    entry.second.push_back(" ");
-                }
-                entry.second.push_back(id_ex.stage_display);
-                found = true;
-                break;
-            }
-        }
+        record_stage(id_ex.assembly, id_ex.stage_display);
     }
     
     // Record EX stage
     if (ex_mem.valid) {
-        bool found = false;
-        for (auto& entry : pipeline_history) {
-            if (entry.first == ex_mem.assembly) {
-                // Check if we need to add more stages
-                while (entry.second.size() < pipeline_history.size()) {
-                    entry.second.push_back(" ");
-                }
-                entry.second.push_back(ex_mem.stage_display);
-                found = true;
-                break;
-            }
-        }
+        record_stage(ex_mem.assembly, ex_mem.stage_display);
     }
     
     // Record MEM stage
     if (mem_wb.valid) {
-        bool found = false;
-        for (auto& entry : pipeline_history) {
-            if (entry.first == mem_wb.assembly) {
-                // Check if we need to add more stages
-                while (entry.second.size() < pipeline_history.size()) {
-                    entry.second.push_back(" ");
-                }
-                entry.second.push_back(mem_wb.stage_display);
-                found = true;
-                break;
-            }
-        }
+        record_stage(mem_wb.assembly, mem_wb.stage_display);
     }
 }
 

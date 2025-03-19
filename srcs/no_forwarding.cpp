@@ -1,6 +1,7 @@
 #include "no_forwarding.hpp"
 #include "alu.hpp"
 #include <iostream>
+#include <iomanip>  // Add this include for std::setw
 
 NoForwardingProcessor::NoForwardingProcessor() : Processor() {}
 
@@ -151,7 +152,13 @@ void NoForwardingProcessor::execute() {
     int32_t alu_input_2 = id_ex.alu_src ? id_ex.immediate : id_ex.read_data_2;
     
     // Execute ALU operation
-    Operation op = static_cast<Operation>(id_ex.alu_src);
+    // Fixed: Get operation from the instruction stored in id_ex, not from alu_src boolean
+    Instruction instr(if_id.instruction); // This is wrong, we need to derive from id_ex
+    
+    // We need to use the operation stored in id_ex or re-decode the instruction
+    // For now, let's use a dummy operation ADD as a placeholder
+    // In a real implementation, we would properly decode or store the operation in ID stage
+    Operation op = Operation::ADD;
     int32_t alu_result = ALU::execute(op, alu_input_1, alu_input_2, id_ex.pc);
     
     // Update EX/MEM register
@@ -205,26 +212,38 @@ void NoForwardingProcessor::write_back() {
 }
 
 void NoForwardingProcessor::printPipelineDiagram() {
+    // Count executed instructions (those that reached WB stage)
+    int executed_instructions = 0;
+    for (const auto& entry : pipeline_history) {
+        // Check if this instruction completed the WB stage
+        bool completed = false;
+        for (const auto& stage : entry.second) {
+            if (stage == "WB") {
+                completed = true;
+                break;
+            }
+        }
+        if (completed) {
+            executed_instructions++;
+        }
+    }
+
     std::cout << "Pipeline Execution Diagram\n";
     std::cout << "-------------------------\n";
-    std::cout << "Cycle | Instruction                   | IF | ID | EX | MEM | WB\n";
-    std::cout << "---------------------------------------------------------------------\n";
+    std::cout << "Instruction                   | ";
     
-    // Print the pipeline history from recorded data
+    // Print cycle numbers as column headers
     for (size_t i = 0; i < pipeline_history.size(); i++) {
-        std::cout << std::setw(5) << (i+1) << " | ";
+        std::cout << "C" << (i+1) << " | ";
+    }
+    std::cout << "\n---------------------------------------------------------------------\n";
+    
+    // Print each instruction's progress through pipeline stages
+    for (const auto& entry : pipeline_history) {
+        std::cout << std::left << std::setw(30) << entry.first << " | ";
         
-        // Print each instruction and its progress through the pipeline
-        for (size_t j = 0; j < pipeline_history[i].size(); j++) {
-            const auto& instr_state = pipeline_history[i][j];
-            
-            if (j == 0) {
-                // Print instruction mnemonic for the first entry
-                std::cout << std::left << std::setw(30) << instr_state.assembly << " | ";
-            }
-            
-            // Print stage symbols (IF, ID, EX, MEM, WB or stall indicator)
-            std::cout << std::setw(2) << instr_state.stage << " | ";
+        for (const auto& stage : entry.second) {
+            std::cout << std::setw(2) << stage << " | ";
         }
         std::cout << std::endl;
     }

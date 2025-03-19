@@ -15,16 +15,11 @@ private:
     // Hazard detection
     bool detectDataHazard() const;
     
-// Inside the NoForwardingProcessor class declaration:
-private:
-    // Structure to track instruction state in pipeline
-    struct PipelineState {
-        std::string assembly;  // Assembly representation
-        std::string stage;     // Current pipeline stage (IF, ID, EX, MEM, WB, or "-" for stall)
-    };
+    // No need to redefine pipeline history structure here
+    // as we're inheriting it from the Processor class
     
-    // Record of pipeline state at each cycle
-    std::vector<std::vector<PipelineState>> pipeline_history;
+    // For compatibility with the updated implementation:
+    void printPipelineDiagram();
     
     // Count of instructions that completed execution
     int executed_instructions = 0;
@@ -34,8 +29,6 @@ public:
     
     // Execute one cycle
     void step() override;
-
-
 };
 
 #endif // NO_FORWARDING_HPP
