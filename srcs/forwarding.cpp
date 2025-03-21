@@ -60,9 +60,9 @@ void ForwardingProcessor::fetch() {
     
     if (!detectLoadUseHazard()) {
         // Check if we're within program bounds
-        if (pc < program.size() * 4) {
-            // Read instruction from memory
-            uint32_t instruction = memory.readWord(pc);
+        if (instruction_memory.hasInstructionAt(pc)) {
+            // Read instruction from instruction memory
+            uint32_t instruction = instruction_memory.readInstruction(pc);
             
             // Update IF/ID register
             if_id.pc = pc;
@@ -309,10 +309,10 @@ void ForwardingProcessor::memory_access() {
     // Memory operations
     if (ex_mem.mem_read) {
         // Load operation
-        mem_wb.read_data = memory.readWord(ex_mem.alu_result);
+        mem_wb.read_data = data_memory.readWord(ex_mem.alu_result);
     } else if (ex_mem.mem_write) {
         // Store operation
-        memory.writeWord(ex_mem.alu_result, ex_mem.write_data);
+        data_memory.writeWord(ex_mem.alu_result, ex_mem.write_data);
     }
     
     // Update MEM/WB register

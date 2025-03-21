@@ -1,16 +1,29 @@
+# RISC-V Pipeline Simulator Source Overview
+
 src/
-├── main.cpp               # Main program entry point
-├── processor.hpp          # Base processor class
-├── processor.cpp          # Base processor implementation
-├── no_forwarding.hpp      # Non-forwarding processor variant
-├── no_forwarding.cpp      # Non-forwarding implementation
-├── instruction.hpp        # RISC-V instruction representation
-├── instruction.cpp        # Instruction implementation
-├── register_file.hpp      # Register file (32 registers)
-├── register_file.cpp      # Register file implementation
-├── memory.hpp             # Memory system
-├── memory.cpp             # Memory implementation
-├── pipeline.hpp           # Pipeline stage definitions
-├── alu.hpp                # ALU operations
-├── alu.cpp                # ALU implementation
-└── Makefile               # Build system
+├── main.cpp               # Main program entry point for no-forwarding simulator
+├── main_forward.cpp       # Main program entry point for forwarding simulator
+├── processor.hpp          # Base processor class (abstract pipeline implementation)
+├── processor.cpp          # Base processor implementation (common operations)
+├── no_forwarding.hpp      # Non-forwarding processor variant (stalls on hazards)
+├── no_forwarding.cpp      # Non-forwarding implementation of pipeline stages
+├── forwarding.hpp         # Forwarding processor variant (uses data forwarding)
+├── forwarding.cpp         # Forwarding implementation of pipeline stages
+├── instruction.hpp        # RISC-V instruction representation and decoding
+├── instruction.cpp        # Instruction implementation with assembly conversion
+├── register_file.hpp      # Register file (32 registers) interface
+├── register_file.cpp      # Register file implementation 
+├── memory.hpp             # Data memory system interface
+├── memory.cpp             # Data memory implementation (byte addressable)
+├── instruction_memory.hpp # Separate instruction memory interface
+├── instruction_memory.cpp # Instruction memory implementation
+├── pipeline.hpp           # Pipeline register definitions for all stages
+├── alu.hpp                # ALU operations interface
+├── alu.cpp                # ALU implementation with all RISC-V operations
+├── makefile               # Build system for compiling both variants
+└── assemble.sh            # Script to convert RISC-V assembly to machine code
+
+Test Programs:
+├── test_simple.txt             # Basic arithmetic operations test
+├── test_print.txt              # System call testing (print value 10)
+└── test_strlen_with_string.txt # String length calculation with embedded data

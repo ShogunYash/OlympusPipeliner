@@ -35,6 +35,7 @@ struct ID_EX_Register {
     std::string assembly;
     bool valid;
     std::string stage_display;
+    bool is_real_instruction = true;
     
     ID_EX_Register() : reg_write(false), mem_to_reg(false), mem_read(false), mem_write(false),
                        alu_src(false), branch(false), jump(false), pc(0), read_data_1(0), 
@@ -56,6 +57,7 @@ struct EX_MEM_Register {
     std::string assembly;
     bool valid;
     std::string stage_display;
+    bool is_real_instruction = true;
     
     EX_MEM_Register() : reg_write(false), mem_to_reg(false), mem_read(false), mem_write(false),
                         alu_result(0), write_data(0), rd(0), assembly(""), valid(false),
@@ -74,6 +76,7 @@ struct MEM_WB_Register {
     std::string assembly;
     bool valid;
     std::string stage_display;
+    bool is_real_instruction = true;
     
     MEM_WB_Register() : reg_write(false), mem_to_reg(false), alu_result(0), read_data(0), rd(0),
                         assembly(""), valid(false), stage_display("") {}

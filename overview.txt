@@ -1,0 +1,69 @@
+# RISC-V Pipeline Simulator Overview
+
+## Architecture
+This simulator implements a 5-stage pipelined RISC-V processor with two versions:
+1. **No-Forwarding Mode**: Stalls on all data hazards
+2. **Forwarding Mode**: Implements data forwarding to reduce stalls
+
+### Key Components
+- **Instruction Memory**: Stores program instructions separately from data
+- **Data Memory**: Stores program data with byte-addressable access
+- **Register File**: 32 RISC-V registers
+- **Pipeline Registers**: IF/ID, ID/EX, EX/MEM, MEM/WB
+- **ALU**: Performs all arithmetic and logical operations
+- **Hazard Detection**: Identifies data hazards and control hazards
+
+## No-Forwarding Implementation
+The no-forwarding implementation detects RAW (Read-After-Write) hazards and stalls the pipeline by:
+1. Checking if an instruction in the IF stage reads from a register that will be written by any 
+   instruction in the EX, MEM, or WB stages
+2. Freezing the PC and preventing the instruction from progressing until the hazard is resolved
+3. Processing instructions in reverse order (WB→MEM→EX→ID→IF) to avoid overwriting data
+
+### Pipeline Stages
+- **Fetch (IF)**: Retrieves the next instruction based on PC
+- **Decode (ID)**: Decodes the instruction and reads register values
+- **Execute (EX)**: Performs ALU operations
+- **Memory (MEM)**: Performs data memory operations for loads and stores
+- **Write Back (WB)**: Writes results back to the register file
+
+### Special Features
+- **Early Branch Resolution**: Branches are resolved in the ID stage to reduce branch penalties
+- **System Call Support**: Implements syscalls for printing values and program exit
+- **Pipeline Visualization**: Creates a diagram showing each instruction's progress through the pipeline
+
+## Performance Analysis
+The no-forwarding implementation experiences significant stalls due to data hazards. For each RAW hazard:
+- Without forwarding: Must stall until the value is written back to the register file
+- Result: Higher CPI (Cycles Per Instruction)
+
+To analyze your program's performance:
+1. Run the simulation with the no-forwarding version
+2. Examine the pipeline diagram to identify stall patterns
+3. Calculate CPI to quantify performance impact
+
+## Project Files
+
+### Core Components
+- **processor.hpp/cpp**: Base processor class with common functionality
+- **no_forwarding.hpp/cpp**: Implementation of processor without data forwarding
+- **forwarding.hpp/cpp**: Implementation of processor with data forwarding
+- **instruction.hpp/cpp**: RISC-V instruction decoder
+- **register_file.hpp/cpp**: Register file implementation
+- **memory.hpp/cpp**: Data memory implementation
+- **instruction_memory.hpp/cpp**: Separate instruction memory implementation
+- **pipeline.hpp**: Pipeline register definitions
+- **alu.hpp/cpp**: Arithmetic Logic Unit implementation
+
+### Entry Points
+- **main.cpp**: Main program for no-forwarding simulator
+- **main_forward.cpp**: Main program for forwarding simulator
+
+### Build System
+- **makefile**: Build configuration for compiling the simulator
+- **assemble.sh**: Shell script for converting RISC-V assembly to machine code
+
+### Test Programs
+- **test_simple.txt**: Basic arithmetic operations
+- **test_print.txt**: System call testing (print integer)
+- **test_strlen_with_string.txt**: String length calculation example

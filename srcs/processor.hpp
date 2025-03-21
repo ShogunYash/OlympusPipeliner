@@ -8,6 +8,7 @@
 #include "register_file.hpp"
 #include "memory.hpp"
 #include "pipeline.hpp"
+#include "instruction_memory.hpp"
 
 class Processor {
 protected:
@@ -17,7 +18,8 @@ protected:
     
     // Components
     RegisterFile registers;
-    Memory memory;
+    Memory data_memory;       // Data memory
+    InstructionMemory instruction_memory;  // Instruction memory
     std::vector<uint32_t> program;
     
     // Pipeline registers
@@ -26,11 +28,12 @@ protected:
     EX_MEM_Register ex_mem;
     MEM_WB_Register mem_wb;
     
-    // Memory for data storage
-    std::unordered_map<uint32_t, int32_t> data_memory;
-    
     // Pipeline visualization
     std::vector<std::pair<std::string, std::vector<std::string>>> pipeline_history;
+    
+    // Pipeline tracking
+    int cycle_count = 0;
+    int executed_instructions = 0;
     
     // Pipeline stage implementation
     virtual void fetch() = 0;
@@ -39,14 +42,20 @@ protected:
     virtual void memory_access() = 0;
     virtual void write_back() = 0;
     
+    // System call handling
+    virtual void handle_syscall();
+    
     // Record pipeline state for visualization
     void record_pipeline_state();
+    
+    // New helper method
+    void updateInstructionStage(const std::string& assembly, const std::string& stage);
     
 public:
     Processor();
     virtual ~Processor() = default;
     
-    // Load program
+    // Load program into instruction memory only
     void loadProgram(const std::vector<uint32_t>& instructions);
     
     // Run processor

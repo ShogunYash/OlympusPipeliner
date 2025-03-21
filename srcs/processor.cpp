@@ -2,11 +2,11 @@
 #include <iostream>
 #include <iomanip>
 
-Processor::Processor() : pc(0), running(false) {}
+Processor::Processor() : pc(0), running(false), cycle_count(0), executed_instructions(0) {}
 
 void Processor::loadProgram(const std::vector<uint32_t>& instructions) {
     program = instructions;
-    memory.loadProgram(instructions);
+    instruction_memory.loadProgram(instructions);
     pc = 0;
     running = true;
     
@@ -18,52 +18,68 @@ void Processor::loadProgram(const std::vector<uint32_t>& instructions) {
     
     // Clear visualization history
     pipeline_history.clear();
+    cycle_count = 0;
+    executed_instructions = 0;
 }
 
 void Processor::record_pipeline_state() {
-    // Helper function to record a stage
-    auto record_stage = [this](const std::string& assembly, const std::string& stage_display) {
-        if (assembly.empty()) return;
-        
-        bool found = false;
-        for (auto& entry : pipeline_history) {
-            if (entry.first == assembly) {
-                // Check if we need to add more stages
-                while (entry.second.size() < pipeline_history.size()) {
-                    entry.second.push_back(" ");
-                }
-                entry.second.push_back(stage_display);
-                found = true;
-                break;
-            }
+    // Initialize empty state for this cycle for all tracked instructions
+    for (auto& entry : pipeline_history) {
+        if (entry.second.size() < static_cast<size_t>(cycle_count)) {
+            entry.second.push_back(" ");
         }
-        
-        if (!found) {
-            pipeline_history.push_back({assembly, {stage_display}});
-        }
-    };
-
-    // Record stages from all pipeline registers
-    // Record IF stage
+    }
+    
+    // Record current stages for active instructions
     if (if_id.valid) {
         Instruction instr(if_id.instruction);
-        std::string assembly = instr.getAssembly();
-        record_stage(assembly, if_id.stage_display);
+        updateInstructionStage(instr.getAssembly(), if_id.stage_display);
     }
     
-    // Record ID stage
     if (id_ex.valid) {
-        record_stage(id_ex.assembly, id_ex.stage_display);
+        updateInstructionStage(id_ex.assembly, id_ex.stage_display);
     }
     
-    // Record EX stage
     if (ex_mem.valid) {
-        record_stage(ex_mem.assembly, ex_mem.stage_display);
+        updateInstructionStage(ex_mem.assembly, ex_mem.stage_display);
     }
     
-    // Record MEM stage
     if (mem_wb.valid) {
-        record_stage(mem_wb.assembly, mem_wb.stage_display);
+        updateInstructionStage(mem_wb.assembly, mem_wb.stage_display);
+        
+        // Count completed instructions
+        if (mem_wb.stage_display == "WB") {
+            executed_instructions++;
+        }
+    }
+    
+    cycle_count++;
+}
+
+void Processor::updateInstructionStage(const std::string& assembly, const std::string& stage) {
+    if (assembly.empty()) return;
+    
+    // Don't record stalls ("-") for visualization clarity
+    if (stage == "-") return;
+    
+    bool found = false;
+    for (auto& entry : pipeline_history) {
+        if (entry.first == assembly) {
+            // Only update if this is a new stage for this instruction
+            // (prevents duplicating EX and MEM stages for ECALL)
+            if (entry.second.empty() || entry.second.back() != stage) {
+                entry.second.push_back(stage);
+            }
+            found = true;
+            break;
+        }
+    }
+    
+    if (!found) {
+        // First time seeing this instruction
+        std::vector<std::string> stages;
+        stages.push_back(stage);
+        pipeline_history.push_back({assembly, stages});
     }
 }
 
@@ -132,5 +148,44 @@ void Processor::displayPipeline() const {
         }
         
         std::cout << std::endl;
+    }
+}
+
+void Processor::handle_syscall() {
+    // Get syscall number from a7 (x17)
+    int syscall_num = registers.read(17); // a7 is x17
+    
+    std::cout << "Handling syscall: " << syscall_num << std::endl;
+    
+    switch (syscall_num) {
+        case 1: // Print integer
+            std::cout << "Syscall 1 (print_int): " << registers.read(10) << std::endl; // a0 is x10
+            break;
+            
+        case 4: { // Print string
+            uint32_t addr = registers.read(10); // String address in a0
+            std::string output;
+            char c;
+            while ((c = data_memory.readByte(addr++)) != 0) {
+                output += c;
+            }
+            std::cout << output;
+            break;
+        }
+            
+        case 10: // Exit program
+            running = false;
+            std::cout << "Program exit requested via syscall" << std::endl;
+            break;
+            
+        case 11: { // Print character
+            char c = registers.read(10) & 0xFF; // Get character from a0
+            std::cout << c;
+            break;
+        }
+            
+        default:
+            std::cerr << "Unknown syscall: " << syscall_num << std::endl;
+            break;
     }
 }

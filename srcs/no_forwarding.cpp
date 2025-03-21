@@ -15,6 +15,13 @@ bool NoForwardingProcessor::detectDataHazard() const {
     
     Instruction instr(if_id.instruction);
     
+    // Special case: ECALL instruction should wait for all previous instructions
+    // to complete to ensure register values are all up-to-date
+    if (instr.getAssembly() == "ecall" && 
+        (id_ex.valid || ex_mem.valid || mem_wb.valid)) {
+        return true;
+    }
+    
     // Check for RAW hazards with instructions in EX stage
     if (id_ex.valid && id_ex.reg_write && id_ex.rd != 0) {
         if ((instr.useRs1() && instr.getRs1() == id_ex.rd) ||
@@ -46,10 +53,10 @@ void NoForwardingProcessor::fetch() {
     if (!running) return;
     
     if (!detectDataHazard()) {
-        // Check if we're within program bounds
-        if (pc < program.size() * 4) {  // This is correct for byte addressing
-            // Read instruction from memory
-            uint32_t instruction = memory.readWord(pc);
+        // Check if we're within program bounds by seeing if there's an instruction at PC
+        if (instruction_memory.hasInstructionAt(pc)) {
+            // Read instruction from instruction memory
+            uint32_t instruction = instruction_memory.readInstruction(pc);
             
             // Update IF/ID register
             if_id.pc = pc;
@@ -67,7 +74,7 @@ void NoForwardingProcessor::fetch() {
         // Stall due to data hazard
         if_id.stage_display = "-";
     }
-} // Added missing closing brace here
+}
 
 void NoForwardingProcessor::decode() {
     if (!if_id.valid) {
@@ -157,7 +164,6 @@ void NoForwardingProcessor::execute() {
     int32_t alu_input_2 = id_ex.alu_src ? id_ex.immediate : id_ex.read_data_2;
     
     // Execute ALU operation based on instruction type and opcode
-    // Instead of trying to decode from assembly string, use the instruction directly
     Operation op = Operation::ADD; // Default to ADD
     
     // Re-decode the instruction
@@ -201,6 +207,15 @@ void NoForwardingProcessor::execute() {
     else if (id_ex.assembly.find("srli") == 0) op = Operation::SRL;
     else if (id_ex.assembly.find("srai") == 0) op = Operation::SRA;
     
+    // Check for system calls (ECALL instruction)
+    if (id_ex.assembly.find("ecall") == 0) {
+        std::cout << "ECALL detected in execute stage" << std::endl;
+        // Only handle syscall in execute stage when registers are ready
+        handle_syscall();
+        // Mark it as a real instruction (not just pipeline management)
+        id_ex.is_real_instruction = true;
+    }
+    
     int32_t alu_result = ALU::execute(op, alu_input_1, alu_input_2, id_ex.pc);
     
     // Update EX/MEM register
@@ -214,6 +229,7 @@ void NoForwardingProcessor::execute() {
     ex_mem.assembly = id_ex.assembly;
     ex_mem.valid = true;
     ex_mem.stage_display = "EX";
+    ex_mem.is_real_instruction = id_ex.is_real_instruction;
 }
 
 void NoForwardingProcessor::memory_access() {
@@ -224,11 +240,16 @@ void NoForwardingProcessor::memory_access() {
     
     // Memory operations
     if (ex_mem.mem_read) {
-        // Load operation - Fix using memory class methods
-        mem_wb.read_data = memory.readWord(ex_mem.alu_result);
+        // Load operation
+        mem_wb.read_data = data_memory.readWord(ex_mem.alu_result);
     } else if (ex_mem.mem_write) {
-        // Store operation - Fix using memory class methods
-        memory.writeWord(ex_mem.alu_result, ex_mem.write_data);
+        // Store operation
+        data_memory.writeWord(ex_mem.alu_result, ex_mem.write_data);
+    }
+    
+    // For ECALL, we've already handled it in execute
+    if (ex_mem.assembly.find("ecall") == 0) {
+        // Just pass it through the pipeline
     }
     
     // Update MEM/WB register
@@ -239,6 +260,7 @@ void NoForwardingProcessor::memory_access() {
     mem_wb.assembly = ex_mem.assembly;
     mem_wb.valid = true;
     mem_wb.stage_display = "MEM";
+    mem_wb.is_real_instruction = ex_mem.is_real_instruction;
 }
 
 void NoForwardingProcessor::write_back() {
@@ -250,14 +272,26 @@ void NoForwardingProcessor::write_back() {
         registers.write(mem_wb.rd, write_data);
     }
     
+    // Only increment instruction count for real instructions (including ECALL)
+    if (mem_wb.is_real_instruction || mem_wb.assembly.find("ecall") == 0) {
+        executed_instructions++;
+    }
+    
     mem_wb.stage_display = "WB";
 }
 
 void NoForwardingProcessor::printPipelineDiagram() {
     // Count executed instructions (those that reached WB stage)
     int executed_instructions = 0;
+    size_t total_cycles = 0;  // Change to size_t to match vector.size()
+    
+    // Find the total number of cycles (the max length of any instruction's history)
     for (const auto& entry : pipeline_history) {
-        // Check if this instruction completed the WB stage
+        if (entry.second.size() > total_cycles) {
+            total_cycles = entry.second.size();
+        }
+        
+        // Count instructions that reached WB stage
         bool completed = false;
         for (const auto& stage : entry.second) {
             if (stage == "WB") {
@@ -275,8 +309,8 @@ void NoForwardingProcessor::printPipelineDiagram() {
     std::cout << "Instruction                   | ";
     
     // Print cycle numbers as column headers
-    for (size_t i = 0; i < pipeline_history.size(); i++) {
-        std::cout << "C" << (i+1) << " | ";
+    for (size_t i = 1; i <= total_cycles; i++) {
+        std::cout << "C" << i << " | ";
     }
     std::cout << "\n---------------------------------------------------------------------\n";
     
@@ -284,19 +318,24 @@ void NoForwardingProcessor::printPipelineDiagram() {
     for (const auto& entry : pipeline_history) {
         std::cout << std::left << std::setw(30) << entry.first << " | ";
         
-        for (const auto& stage : entry.second) {
-            std::cout << std::setw(2) << stage << " | ";
+        // Print stages for each cycle, or blank for cycles where this instruction wasn't active
+        for (size_t i = 0; i < total_cycles; i++) {
+            if (i < entry.second.size()) {
+                std::cout << std::setw(2) << entry.second[i] << " | ";
+            } else {
+                std::cout << "   | ";
+            }
         }
         std::cout << std::endl;
     }
     
     std::cout << "---------------------------------------------------------------------\n";
-    std::cout << "Total Cycles: " << pipeline_history.size() << std::endl;
+    std::cout << "Total Cycles: " << total_cycles << std::endl;
     std::cout << "Total Instructions Executed: " << executed_instructions << std::endl;
     
     // Calculate CPI (Cycles Per Instruction)
     if (executed_instructions > 0) {
-        double cpi = static_cast<double>(pipeline_history.size()) / executed_instructions;
+        double cpi = static_cast<double>(total_cycles) / executed_instructions;
         std::cout << "CPI: " << std::fixed << std::setprecision(2) << cpi << std::endl;
     }
 }

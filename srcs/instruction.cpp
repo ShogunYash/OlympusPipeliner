@@ -128,6 +128,15 @@ void Instruction::decode() {
     }
 }
 
+std::string Instruction::getAssembly() const {
+    // Add special case for ecall
+    if (raw_instruction == 0x00000073) {
+        return "ecall";
+    }
+    
+    return assembly;
+}
+
 bool Instruction::useRs1() const {
     return op != Operation::LUI && op != Operation::AUIPC && op != Operation::JAL && op != Operation::NOP;
 }

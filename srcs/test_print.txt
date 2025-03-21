@@ -4,3 +4,4 @@
 0x00000008 0x00000073  # ecall              # Make the syscall to print the integer
 0x0000000c 0x00a00893  # addi a7, x0, 10    # Set syscall number to 10 (exit)
 0x00000010 0x00000073  # ecall              # Make the syscall to exit
+

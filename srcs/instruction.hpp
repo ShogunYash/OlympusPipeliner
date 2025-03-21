@@ -62,7 +62,7 @@ public:
     uint8_t getRs1() const { return rs1; }
     uint8_t getRs2() const { return rs2; }
     int32_t getImm() const { return imm; }
-    std::string getAssembly() const { return assembly; }
+    std::string getAssembly() const;
     
     // Utility methods
     bool isNop() const { return op == Operation::NOP; }

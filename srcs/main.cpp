@@ -28,6 +28,9 @@ std::vector<uint32_t> loadInstructionsFromFile(const std::string& filename) {
             line = line.substr(0, comment_pos);
         }
         
+        // Skip if line is empty after removing comments
+        if (line.empty()) continue;
+        
         std::istringstream iss(line);
         std::string address, hex_instr;
         
