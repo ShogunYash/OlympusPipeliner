@@ -1,0 +1,6 @@
+# Simple test with print syscall
+0x00000000 0x00a00513  # addi a0, x0, 10    # Load value 10 into a0
+0x00000004 0x00100893  # addi a7, x0, 1     # Set syscall number to 1 (print_int)
+0x00000008 0x00000073  # ecall              # Make the syscall to print the integer
+0x0000000c 0x00a00893  # addi a7, x0, 10    # Set syscall number to 10 (exit)
+0x00000010 0x00000073  # ecall              # Make the syscall to exit
