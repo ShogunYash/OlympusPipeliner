@@ -42,6 +42,6 @@ public:
     NoForwardingProcessor();
     bool loadInstructions(const std::string& filename);
     void run(int cycles);
-    void printPipelineDiagram();
+    void printPipelineDiagram(int cycles);
     size_t getInstructionCount() const { return instructionTexts.size(); }
 };
