@@ -251,6 +251,7 @@ void NoForwardingProcessor::updatePipelineHistory(int cycle) {
     }
 }
 
+
 void NoForwardingProcessor::run(int cycles) {
     // Reset pipeline state.
     pc = 0;
@@ -265,23 +266,35 @@ void NoForwardingProcessor::run(int cycles) {
     pipelineHistory.clear();
     
     for (int cycle = 0; cycle < cycles; cycle++) {
+        std::cout << "========== Starting Cycle " << cycle << " ==========" << std::endl;
+        
         // WB Stage
         if (!memwb.isEmpty) {
+            std::cout << "Cycle " << cycle << " - WB: Processing " 
+                      << memwb.instructionString << " at PC: " << memwb.pc << std::endl;
             if (memwb.controls.regWrite && memwb.rd != 0) {
                 uint32_t writeData = memwb.controls.memToReg ? memwb.readData : memwb.aluResult;
                 registers.write(memwb.rd, writeData);
                 // Clear the register-in-use flag since WB completes the write.
                 regInUse[memwb.rd] = false;
+                std::cout << "         Written " << writeData << " to register x" << memwb.rd << std::endl;
             }
+        } else {
+            std::cout << "Cycle " << cycle << " - WB: No instruction" << std::endl;
         }
         
         // MEM Stage
         if (!exmem.isEmpty) {
+            std::cout << "Cycle " << cycle << " - MEM: Processing " 
+                      << exmem.instructionString << " at PC: " << exmem.pc << std::endl;
             if (exmem.controls.memRead) {
                 memwb.readData = dataMemory.readWord(exmem.aluResult);
+                std::cout << "         Read from memory at address " << exmem.aluResult << " data: " 
+                          << memwb.readData << std::endl;
             }
             if (exmem.controls.memWrite) {
                 dataMemory.writeWord(exmem.aluResult, exmem.readData2);
+                std::cout << "         Wrote " << exmem.readData2 << " to memory at address " << exmem.aluResult << std::endl;
             }
             
             // Propagate to WB stage, including raw machine code.
@@ -294,14 +307,18 @@ void NoForwardingProcessor::run(int cycles) {
             memwb.isEmpty = false;
         } else {
             memwb.isEmpty = true;
+            std::cout << "Cycle " << cycle << " - MEM: No instruction" << std::endl;
         }
         
         // EX Stage
         if (!idex.isEmpty) {
+            std::cout << "Cycle " << cycle << " - EX: Processing " 
+                      << idex.instructionString << " at PC: " << idex.pc << std::endl;
             uint32_t aluOp1 = idex.readData1;
             uint32_t aluOp2 = idex.controls.aluSrc ? idex.imm : idex.readData2;
             
             exmem.aluResult = executeALU(aluOp1, aluOp2, idex.controls.aluOp);
+            std::cout << "         ALU operation result: " << exmem.aluResult << std::endl;
             
             // Propagate to MEM stage, including raw machine code.
             exmem.pc = idex.pc;
@@ -313,10 +330,13 @@ void NoForwardingProcessor::run(int cycles) {
             exmem.isEmpty = false;
         } else {
             exmem.isEmpty = true;
+            std::cout << "Cycle " << cycle << " - EX: No instruction" << std::endl;
         }
         
         // ID Stage
         if (!ifid.isEmpty) {
+            std::cout << "Cycle " << cycle << " - ID: Processing " 
+                      << ifid.instructionString << " at PC: " << ifid.pc << std::endl;
             uint32_t instruction = ifid.instruction;
             
             // Decode instruction fields.
@@ -333,6 +353,7 @@ void NoForwardingProcessor::run(int cycles) {
             // Check register-in-use flags first.
             if ((rs1 != 0 && regInUse[rs1]) || (rs2 != 0 && regInUse[rs2])) {
                 hazard = true;
+                std::cout << "         Hazard detected: Source register busy" << std::endl;
             }
             
             // Handle control hazards for branch/jump.
@@ -369,15 +390,18 @@ void NoForwardingProcessor::run(int cycles) {
                 if (condition) {
                     takeJump = true;
                     jumpTarget = ifid.pc + imm;
+                    std::cout << "         Branch taken to PC: " << jumpTarget << std::endl;
                 }
             }
             else if (opcode == 0x6F) {  // JAL
                 takeJump = true;
                 jumpTarget = ifid.pc + imm;
+                std::cout << "         JAL: Jump to PC: " << jumpTarget << std::endl;
             }
             else if (opcode == 0x67) {  // JALR
                 takeJump = true;
                 jumpTarget = (registers.read(rs1) + imm) & ~1;
+                std::cout << "         JALR: Jump to PC: " << jumpTarget << std::endl;
             }
             
             if (!hazard) {
@@ -399,12 +423,14 @@ void NoForwardingProcessor::run(int cycles) {
                 // Mark destination register as busy in the register-in-use array.
                 if (idex.controls.regWrite && rd != 0) {
                     regInUse[rd] = true;
+                    std::cout << "         Marking register x" << rd << " as busy" << std::endl;
                 }
                 
                 // Handle branch/jump.
                 if (takeJump) {
                     pc = jumpTarget;
                     ifid.isEmpty = true;  // Flush IF/ID.
+                    std::cout << "         Flushing IF stage due to jump/branch" << std::endl;
                 } else {
                     pc += 4;  // Advance PC normally.
                 }
@@ -413,9 +439,11 @@ void NoForwardingProcessor::run(int cycles) {
                 stall = true;
                 ifid.isStalled = true;  // Mark IF/ID as stalled.
                 idex.isEmpty = true;
+                std::cout << "         Stalling pipeline due to hazard" << std::endl;
             }
         } else {
             idex.isEmpty = true;
+            std::cout << "Cycle " << cycle << " - ID: No instruction" << std::endl;
         }
         
         // IF Stage
@@ -425,13 +453,16 @@ void NoForwardingProcessor::run(int cycles) {
             ifid.instructionString = instructionStrings[pc / 4];
             ifid.isEmpty = false;
             ifid.isStalled = false;
+            std::cout << "Cycle " << cycle << " - IF: Fetched " 
+                      << ifid.instructionString << " at PC: " << pc << std::endl;
             pc += 4;  // Advance PC normally.
         } else if (stall) {
             // In case of stall, keep current instruction in IF stage (PC remains unchanged).
-            pc = pc;
+            std::cout << "Cycle " << cycle << " - IF: Stall in effect, instruction remains same" << std::endl;
         } else {
             ifid.isEmpty = true;
             ifid.isStalled = false;
+            std::cout << "Cycle " << cycle << " - IF: No instruction fetched" << std::endl;
         }
         
         // Update pipeline history for visualization.
@@ -442,8 +473,207 @@ void NoForwardingProcessor::run(int cycles) {
             stall = false;
             ifid.isStalled = false;
         }
+        
+        std::cout << "========== Ending Cycle " << cycle << " ==========" << std::endl << std::endl;
     }
 }
+
+// void NoForwardingProcessor::run(int cycles) {
+//     // Reset pipeline state.
+//     pc = 0;
+//     stall = false;
+//     ifid.isEmpty = true;
+//     ifid.isStalled = false;
+//     idex.isEmpty = true;
+//     idex.isStalled = false;
+//     exmem.isEmpty = true;
+//     exmem.isStalled = false;
+//     memwb.isEmpty = true;
+//     pipelineHistory.clear();
+    
+//     for (int cycle = 0; cycle < cycles; cycle++) {
+// std::cout << "========== Starting Cycle " << cycle << " ==========" << std::endl;
+        
+//         // WB Stage
+//         if (!memwb.isEmpty) {
+// std::cout << "Cycle " << cycle << " - WB: Processing " << memwb.instructionString << std::endl;
+//             if (memwb.controls.regWrite && memwb.rd != 0) {
+//                 uint32_t writeData = memwb.controls.memToReg ? memwb.readData : memwb.aluResult;
+//                 registers.write(memwb.rd, writeData);
+//                 // Clear the register-in-use flag since WB completes the write.
+//                 regInUse[memwb.rd] = false;
+//             }
+//         }
+        
+//         // MEM Stage
+//         if (!exmem.isEmpty) {
+//             if (exmem.controls.memRead) {
+//                 memwb.readData = dataMemory.readWord(exmem.aluResult);
+//             }
+//             if (exmem.controls.memWrite) {
+//                 dataMemory.writeWord(exmem.aluResult, exmem.readData2);
+//             }
+            
+//             // Propagate to WB stage, including raw machine code.
+//             memwb.pc = exmem.pc;
+//             memwb.aluResult = exmem.aluResult;
+//             memwb.rd = exmem.rd;
+//             memwb.controls = exmem.controls;
+//             memwb.instruction = exmem.instruction;             // Propagate machine code.
+//             memwb.instructionString = exmem.instructionString;   // Propagate assembly string.
+//             memwb.isEmpty = false;
+//         } else {
+//             memwb.isEmpty = true;
+//         }
+        
+//         // EX Stage
+//         if (!idex.isEmpty) {
+//             uint32_t aluOp1 = idex.readData1;
+//             uint32_t aluOp2 = idex.controls.aluSrc ? idex.imm : idex.readData2;
+            
+//             exmem.aluResult = executeALU(aluOp1, aluOp2, idex.controls.aluOp);
+            
+//             // Propagate to MEM stage, including raw machine code.
+//             exmem.pc = idex.pc;
+//             exmem.readData2 = idex.readData2;
+//             exmem.rd = idex.rd;
+//             exmem.controls = idex.controls;
+//             exmem.instruction = idex.instruction;             // Propagate machine code.
+//             exmem.instructionString = idex.instructionString;   // Propagate assembly string.
+//             exmem.isEmpty = false;
+//         } else {
+//             exmem.isEmpty = true;
+//         }
+        
+//         // ID Stage
+//         if (!ifid.isEmpty) {
+//             uint32_t instruction = ifid.instruction;
+            
+//             // Decode instruction fields.
+//             uint32_t opcode = instruction & 0x7F;
+//             uint32_t rd = (instruction >> 7) & 0x1F;
+//             uint32_t rs1 = (instruction >> 15) & 0x1F;
+//             uint32_t rs2 = (instruction >> 20) & 0x1F;
+            
+//             // Extract immediate value.
+//             uint32_t imm = extractImmediate(instruction, opcode);
+            
+//             // Hazard detection.
+//             bool hazard = false;
+//             // Check register-in-use flags first.
+//             if ((rs1 != 0 && regInUse[rs1]) || (rs2 != 0 && regInUse[rs2])) {
+//                 hazard = true;
+//             }
+            
+//             // Handle control hazards for branch/jump.
+//             bool takeJump = false;
+//             uint32_t jumpTarget = 0;
+            
+//             if (opcode == 0x63) {  // Branch
+//                 uint32_t rs1Value = registers.read(rs1);
+//                 uint32_t rs2Value = registers.read(rs2);
+//                 bool condition = false;
+//                 uint32_t funct3 = (instruction >> 12) & 0x7;
+                
+//                 switch (funct3) {
+//                     case 0x0:  // BEQ
+//                         condition = (rs1Value == rs2Value);
+//                         break;
+//                     case 0x1:  // BNE
+//                         condition = (rs1Value != rs2Value);
+//                         break;
+//                     case 0x4:  // BLT
+//                         condition = (static_cast<int32_t>(rs1Value) < static_cast<int32_t>(rs2Value));
+//                         break;
+//                     case 0x5:  // BGE
+//                         condition = (static_cast<int32_t>(rs1Value) >= static_cast<int32_t>(rs2Value));
+//                         break;
+//                     case 0x6:  // BLTU
+//                         condition = (rs1Value < rs2Value);
+//                         break;
+//                     case 0x7:  // BGEU
+//                         condition = (rs1Value >= rs2Value);
+//                         break;
+//                 }
+                
+//                 if (condition) {
+//                     takeJump = true;
+//                     jumpTarget = ifid.pc + imm;
+//                 }
+//             }
+//             else if (opcode == 0x6F) {  // JAL
+//                 takeJump = true;
+//                 jumpTarget = ifid.pc + imm;
+//             }
+//             else if (opcode == 0x67) {  // JALR
+//                 takeJump = true;
+//                 jumpTarget = (registers.read(rs1) + imm) & ~1;
+//             }
+            
+//             if (!hazard) {
+//                 // No hazard: Read registers and set up ID/EX stage.
+//                 idex.readData1 = registers.read(rs1);
+//                 idex.readData2 = registers.read(rs2);
+//                 idex.pc = ifid.pc;
+//                 idex.imm = imm;
+//                 idex.rs1 = rs1;
+//                 idex.rs2 = rs2;
+//                 idex.rd = rd;
+//                 idex.controls = decodeControlSignals(instruction);
+//                 // Propagate raw machine code and assembly string.
+//                 idex.instruction = ifid.instruction;
+//                 idex.instructionString = ifid.instructionString;
+//                 idex.isEmpty = false;
+//                 idex.isStalled = false;
+                
+//                 // Mark destination register as busy in the register-in-use array.
+//                 if (idex.controls.regWrite && rd != 0) {
+//                     regInUse[rd] = true;
+//                 }
+                
+//                 // Handle branch/jump.
+//                 if (takeJump) {
+//                     pc = jumpTarget;
+//                     ifid.isEmpty = true;  // Flush IF/ID.
+//                 } else {
+//                     pc += 4;  // Advance PC normally.
+//                 }
+//             } else {
+//                 // Hazard detected: stall the pipeline.
+//                 stall = true;
+//                 ifid.isStalled = true;  // Mark IF/ID as stalled.
+//                 idex.isEmpty = true;
+//             }
+//         } else {
+//             idex.isEmpty = true;
+//         }
+        
+//         // IF Stage
+//         if (!stall && (pc / 4 < instructionMemory.size())) {
+//             ifid.instruction = instructionMemory[pc / 4];
+//             ifid.pc = pc;
+//             ifid.instructionString = instructionStrings[pc / 4];
+//             ifid.isEmpty = false;
+//             ifid.isStalled = false;
+//             pc += 4;  // Advance PC normally.
+//         } else if (stall) {
+//             // In case of stall, keep current instruction in IF stage (PC remains unchanged).
+//             pc = pc;
+//         } else {
+//             ifid.isEmpty = true;
+//             ifid.isStalled = false;
+//         }
+        
+//         // Update pipeline history for visualization.
+//         updatePipelineHistory(cycle);
+        
+//         // Reset stall flag for next cycle.
+//         if (stall) {
+//             stall = false;
+//             ifid.isStalled = false;
+//         }
+//     }
+// }
 
 void NoForwardingProcessor::printPipelineDiagram() {
     // Open output file "output.txt"
