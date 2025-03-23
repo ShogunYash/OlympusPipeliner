@@ -431,9 +431,7 @@ void NoForwardingProcessor::run(int cycles) {
                     pc = jumpTarget;
                     ifid.isEmpty = true;  // Flush IF/ID.
                     std::cout << "         Flushing IF stage due to jump/branch" << std::endl;
-                } else {
-                    pc += 4;  // Advance PC normally.
-                }
+                } 
             } else {
                 // Hazard detected: stall the pipeline.
                 stall = true;
@@ -447,6 +445,7 @@ void NoForwardingProcessor::run(int cycles) {
         }
         
         // IF Stage
+        std::cout<< "Stall: " << stall << "; pc: " << pc << "; instructionMemory.size(): " << instructionMemory.size() << std::endl;
         if (!stall && (pc / 4 < instructionMemory.size())) {
             ifid.instruction = instructionMemory[pc / 4];
             ifid.pc = pc;
