@@ -192,22 +192,22 @@ void NoForwardingProcessor::updatePipelineHistory(int cycle) {
     // Update pipeline history for each active instruction in each stage
     if (!ifid.isEmpty) {
         if (pipelineHistory.find(ifid.instructionString) == pipelineHistory.end()) {
-            pipelineHistory[ifid.instructionString] = std::vector<std::string>(unsignedCycle + 1, " ");
+            pipelineHistory[ifid.instructionString] = std::vector<std::string>(unsignedCycle + 1, "  ");
         }
         if (pipelineHistory[ifid.instructionString].size() <= unsignedCycle) {
-            pipelineHistory[ifid.instructionString].resize(unsignedCycle + 1, " ");
+            pipelineHistory[ifid.instructionString].resize(unsignedCycle + 1, "  ");
         }
-        pipelineHistory[ifid.instructionString][unsignedCycle] = ifid.isStalled ? "-" : "IF";
+        pipelineHistory[ifid.instructionString][unsignedCycle] = ifid.isStalled ? "- " : "IF";
     }
     
     if (!idex.isEmpty) {
         if (pipelineHistory.find(idex.instructionString) == pipelineHistory.end()) {
-            pipelineHistory[idex.instructionString] = std::vector<std::string>(unsignedCycle + 1, " ");
+            pipelineHistory[idex.instructionString] = std::vector<std::string>(unsignedCycle + 1, "  ");
         }
         if (pipelineHistory[idex.instructionString].size() <= unsignedCycle) {
-            pipelineHistory[idex.instructionString].resize(unsignedCycle + 1, " ");
+            pipelineHistory[idex.instructionString].resize(unsignedCycle + 1, "  ");
         }
-        pipelineHistory[idex.instructionString][unsignedCycle] = idex.isStalled ? "-" : "ID";
+        pipelineHistory[idex.instructionString][unsignedCycle] = idex.isStalled ? "- " : "ID";
     }
     
     if (!exmem.isEmpty) {
@@ -215,27 +215,27 @@ void NoForwardingProcessor::updatePipelineHistory(int cycle) {
             pipelineHistory[exmem.instructionString] = std::vector<std::string>(unsignedCycle + 1, " ");
         }
         if (pipelineHistory[exmem.instructionString].size() <= unsignedCycle) {
-            pipelineHistory[exmem.instructionString].resize(unsignedCycle + 1, " ");
+            pipelineHistory[exmem.instructionString].resize(unsignedCycle + 1, "  ");
         }
-        pipelineHistory[exmem.instructionString][unsignedCycle] = exmem.isStalled ? "-" : "EX";
+        pipelineHistory[exmem.instructionString][unsignedCycle] = exmem.isStalled ? "- " : "EX";
     }
     
     if (!memwb.isEmpty) {
         if (pipelineHistory.find(memwb.instructionString) == pipelineHistory.end()) {
-            pipelineHistory[memwb.instructionString] = std::vector<std::string>(unsignedCycle + 1, " ");
+            pipelineHistory[memwb.instructionString] = std::vector<std::string>(unsignedCycle + 1, "  ");
         }
         if (pipelineHistory[memwb.instructionString].size() <= unsignedCycle) {
-            pipelineHistory[memwb.instructionString].resize(unsignedCycle + 1, " ");
+            pipelineHistory[memwb.instructionString].resize(unsignedCycle + 1, "  ");
         }
-        pipelineHistory[memwb.instructionString][unsignedCycle] = "MEM";
+        pipelineHistory[memwb.instructionString][unsignedCycle] = "ME";
     }
     
     // Update WB stage for any instruction that was in MEM in previous cycle
     for (auto& pair : pipelineHistory) {
         if (pair.second.size() <= unsignedCycle) {
-            pair.second.resize(unsignedCycle + 1, " ");
+            pair.second.resize(unsignedCycle + 1, "  ");
         }
-        if (cycle > 0 && pair.second.size() > static_cast<size_t>(cycle - 1) && pair.second[cycle - 1] == "MEM") {
+        if (cycle > 0 && pair.second.size() > static_cast<size_t>(cycle - 1) && pair.second[cycle - 1] == "ME") {
             pair.second[unsignedCycle] = "WB";
         }
     }
@@ -244,7 +244,7 @@ void NoForwardingProcessor::updatePipelineHistory(int cycle) {
     if (stall) {
         for (auto& pair : pipelineHistory) {
             if (pair.second.size() > unsignedCycle && pair.second[unsignedCycle] == "IF") {
-                pair.second[unsignedCycle] = "-";
+                pair.second[unsignedCycle] = "- ";
                 break;  // Only mark one instruction as stalled.
             }
         }
