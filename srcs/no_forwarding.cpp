@@ -15,14 +15,17 @@ bool NoForwardingProcessor::detectDataHazard() const {
     
     Instruction instr(if_id.instruction);
     
-    // Special case: ECALL instruction should wait for all previous instructions
-    // to complete to ensure register values are all up-to-date
-    if (instr.getAssembly() == "ecall" && 
-        (id_ex.valid || ex_mem.valid || mem_wb.valid)) {
-        return true;
+    // ECALL needs special treatment - it must completely drain the pipelineo be ready
+    if (instr.getAssembly() == "ecall") {
+        // Always stall ECALL until pipeline is clear to ensure registers are up-to-date
+        if (id_ex.valid || ex_mem.valid || mem_wb.valid) {
+            std::cout << "Stalling ECALL to wait for pipeline to drain" << std::endl;
+            return true; // Stall until pipeline is empty
+        }
+        return false;
     }
     
-    // Check for RAW hazards with instructions in EX stage
+    // Regular data hazard detection for normal instructions
     if (id_ex.valid && id_ex.reg_write && id_ex.rd != 0) {
         if ((instr.useRs1() && instr.getRs1() == id_ex.rd) ||
             (instr.useRs2() && instr.getRs2() == id_ex.rd)) {
@@ -58,27 +61,27 @@ void NoForwardingProcessor::fetch() {
             // Read instruction from instruction memory
             uint32_t instruction = instruction_memory.readInstruction(pc);
             
-            // Update IF/ID register
-            if_id.pc = pc;
-            if_id.instruction = instruction;
-            if_id.valid = true;
-            if_id.stage_display = "IF";
+            // Update next_if_id register (not if_id directly)
+            next_if_id.pc = pc;
+            next_if_id.instruction = instruction;
+            next_if_id.valid = true;
+            next_if_id.stage_display = "IF";
             
             // Update PC
             pc += 4;  // This is correct for byte addressing
         } else {
-            if_id.valid = false;
+            next_if_id.valid = false;
             running = false;  // This should stop execution
         }
     } else {
-        // Stall due to data hazard
-        if_id.stage_display = "-";
+        next_if_id = if_id; // Stall - preserve current value
+        next_if_id.stage_display = "-";
     }
 }
 
 void NoForwardingProcessor::decode() {
     if (!if_id.valid) {
-        id_ex.valid = false;
+        next_id_ex.valid = false;
         return;
     }
     
@@ -90,25 +93,25 @@ void NoForwardingProcessor::decode() {
     int32_t rs2_value = instr.useRs2() ? registers.read(instr.getRs2()) : 0;
     
     // Set control signals
-    id_ex.reg_write = instr.useRd();
-    id_ex.mem_to_reg = instr.isLoad();
-    id_ex.mem_read = instr.isLoad();
-    id_ex.mem_write = instr.isStore();
-    id_ex.alu_src = instr.getType() != InstructionType::R_TYPE && !instr.isBranch();
-    id_ex.branch = instr.isBranch();
-    id_ex.jump = instr.isJump();
+    next_id_ex.reg_write = instr.useRd();
+    next_id_ex.mem_to_reg = instr.isLoad();
+    next_id_ex.mem_read = instr.isLoad();
+    next_id_ex.mem_write = instr.isStore();
+    next_id_ex.alu_src = instr.getType() != InstructionType::R_TYPE && !instr.isBranch();
+    next_id_ex.branch = instr.isBranch();
+    next_id_ex.jump = instr.isJump();
     
     // Set data values
-    id_ex.pc = if_id.pc;
-    id_ex.read_data_1 = rs1_value;
-    id_ex.read_data_2 = rs2_value;
-    id_ex.immediate = instr.getImm();
-    id_ex.rs1 = instr.getRs1();
-    id_ex.rs2 = instr.getRs2();
-    id_ex.rd = instr.getRd();
-    id_ex.assembly = instr.getAssembly();
-    id_ex.valid = true;
-    id_ex.stage_display = "ID";
+    next_id_ex.pc = if_id.pc;
+    next_id_ex.read_data_1 = rs1_value;
+    next_id_ex.read_data_2 = rs2_value;
+    next_id_ex.immediate = instr.getImm();
+    next_id_ex.rs1 = instr.getRs1();
+    next_id_ex.rs2 = instr.getRs2();
+    next_id_ex.rd = instr.getRd();
+    next_id_ex.assembly = instr.getAssembly();
+    next_id_ex.valid = true;
+    next_id_ex.stage_display = "ID";
     
     // Handle branches in ID stage
     if (instr.isBranch()) {
@@ -132,7 +135,7 @@ void NoForwardingProcessor::decode() {
             pc = branch_target;
             
             // Flush IF stage
-            if_id.valid = false;
+            next_if_id.valid = false;
         }
     } else if (instr.isJump()) {
         uint32_t jump_target;
@@ -149,13 +152,13 @@ void NoForwardingProcessor::decode() {
         pc = jump_target;
         
         // Flush IF stage
-        if_id.valid = false;
+        next_if_id.valid = false;
     }
 }
 
 void NoForwardingProcessor::execute() {
     if (!id_ex.valid) {
-        ex_mem.valid = false;
+        next_ex_mem.valid = false;
         return;
     }
     
@@ -207,41 +210,52 @@ void NoForwardingProcessor::execute() {
     else if (id_ex.assembly.find("srli") == 0) op = Operation::SRL;
     else if (id_ex.assembly.find("srai") == 0) op = Operation::SRA;
     
+    // Should only happen after all previous instructions have completed
+    static bool ecall_executed = false;
     // Check for system calls (ECALL instruction)
     if (id_ex.assembly.find("ecall") == 0) {
-        std::cout << "ECALL detected in execute stage" << std::endl;
-        // Only handle syscall in execute stage when registers are ready
-        handle_syscall();
-        // Mark it as a real instruction (not just pipeline management)
+        // Set a flag to indicate this is a real instruction that should count toward execution
         id_ex.is_real_instruction = true;
+        next_ex_mem.is_real_instruction = true;
+        
+        // Execute the syscall exactly once when it reaches execute stage
+        
+        if (!ecall_executed) {
+            std::cout << "ECALL executing (once only)" << std::endl;
+            handle_syscall();
+            ecall_executed = true;
+        }
+    } else {
+        // Reset the flag for non-ECALL instructions
+        ecall_executed = false;
     }
     
     int32_t alu_result = ALU::execute(op, alu_input_1, alu_input_2, id_ex.pc);
     
-    // Update EX/MEM register
-    ex_mem.reg_write = id_ex.reg_write;
-    ex_mem.mem_to_reg = id_ex.mem_to_reg;
-    ex_mem.mem_read = id_ex.mem_read;
-    ex_mem.mem_write = id_ex.mem_write;
-    ex_mem.alu_result = alu_result;
-    ex_mem.write_data = id_ex.read_data_2;
-    ex_mem.rd = id_ex.rd;
-    ex_mem.assembly = id_ex.assembly;
-    ex_mem.valid = true;
-    ex_mem.stage_display = "EX";
-    ex_mem.is_real_instruction = id_ex.is_real_instruction;
+    // Update next_ex_mem register (not ex_mem directly)
+    next_ex_mem.reg_write = id_ex.reg_write;
+    next_ex_mem.mem_to_reg = id_ex.mem_to_reg;
+    next_ex_mem.mem_read = id_ex.mem_read;
+    next_ex_mem.mem_write = id_ex.mem_write;
+    next_ex_mem.alu_result = alu_result;
+    next_ex_mem.write_data = id_ex.read_data_2;
+    next_ex_mem.rd = id_ex.rd;
+    next_ex_mem.assembly = id_ex.assembly;
+    next_ex_mem.valid = true;
+    next_ex_mem.stage_display = "EX";
+    next_ex_mem.is_real_instruction = id_ex.is_real_instruction;
 }
 
 void NoForwardingProcessor::memory_access() {
     if (!ex_mem.valid) {
-        mem_wb.valid = false;
+        next_mem_wb.valid = false;
         return;
     }
     
     // Memory operations
     if (ex_mem.mem_read) {
         // Load operation
-        mem_wb.read_data = data_memory.readWord(ex_mem.alu_result);
+        next_mem_wb.read_data = data_memory.readWord(ex_mem.alu_result);
     } else if (ex_mem.mem_write) {
         // Store operation
         data_memory.writeWord(ex_mem.alu_result, ex_mem.write_data);
@@ -252,24 +266,30 @@ void NoForwardingProcessor::memory_access() {
         // Just pass it through the pipeline
     }
     
-    // Update MEM/WB register
-    mem_wb.reg_write = ex_mem.reg_write;
-    mem_wb.mem_to_reg = ex_mem.mem_to_reg;
-    mem_wb.alu_result = ex_mem.alu_result;
-    mem_wb.rd = ex_mem.rd;
-    mem_wb.assembly = ex_mem.assembly;
-    mem_wb.valid = true;
-    mem_wb.stage_display = "MEM";
-    mem_wb.is_real_instruction = ex_mem.is_real_instruction;
+    // Update next_mem_wb register (not mem_wb directly)
+    next_mem_wb.reg_write = ex_mem.reg_write;
+    next_mem_wb.mem_to_reg = ex_mem.mem_to_reg;
+    next_mem_wb.alu_result = ex_mem.alu_result;
+    next_mem_wb.rd = ex_mem.rd;
+    next_mem_wb.assembly = ex_mem.assembly;
+    next_mem_wb.valid = true;
+    next_mem_wb.stage_display = "MEM";
+    next_mem_wb.is_real_instruction = ex_mem.is_real_instruction;
 }
 
 void NoForwardingProcessor::write_back() {
     if (!mem_wb.valid) return;
     
+    // Debug output for register writes
+    std::cout << "WB stage: " << mem_wb.assembly;
+    
     // Write back to register file
     if (mem_wb.reg_write && mem_wb.rd != 0) {
         int32_t write_data = mem_wb.mem_to_reg ? mem_wb.read_data : mem_wb.alu_result;
+        std::cout << " writing " << write_data << " to x" << (int)mem_wb.rd << std::endl;
         registers.write(mem_wb.rd, write_data);
+    } else {
+        std::cout << " (no register write)" << std::endl;
     }
     
     // Only increment instruction count for real instructions (including ECALL)
@@ -277,13 +297,14 @@ void NoForwardingProcessor::write_back() {
         executed_instructions++;
     }
     
+    // Update stage display for visualization
     mem_wb.stage_display = "WB";
 }
 
 void NoForwardingProcessor::printPipelineDiagram() {
     // Count executed instructions (those that reached WB stage)
     int executed_instructions = 0;
-    size_t total_cycles = 0;  // Change to size_t to match vector.size()
+    size_t total_cycles = 0;
     
     // Find the total number of cycles (the max length of any instruction's history)
     for (const auto& entry : pipeline_history) {
@@ -304,32 +325,49 @@ void NoForwardingProcessor::printPipelineDiagram() {
         }
     }
 
+    // Calculate the total width of the table
+    const int instr_width = 30;
+    const int cycle_width = 4;
+    
     std::cout << "Pipeline Execution Diagram\n";
     std::cout << "-------------------------\n";
-    std::cout << "Instruction                   | ";
     
-    // Print cycle numbers as column headers
+    // Print header row with properly aligned cycle numbers
+    std::cout << "| " << std::left << std::setw(instr_width) << "Instruction";
+    
+    // Print cycle numbers as column headers - FIX ALIGNMENT ISSUE
     for (size_t i = 1; i <= total_cycles; i++) {
-        std::cout << "C" << i << " | ";
+        std::string cycleHeader = "C" + std::to_string(i);
+        std::cout << "| " << std::setw(cycle_width) << cycleHeader;
     }
-    std::cout << "\n---------------------------------------------------------------------\n";
+    std::cout << " |" << std::endl;
+    
+    // Separator line
+    std::cout << "+" << std::string(instr_width + 2, '-');
+    for (size_t i = 0; i < total_cycles; i++) {
+        std::cout << "+" << std::string(cycle_width + 1, '-');
+    }
+    std::cout << "+" << std::endl;
     
     // Print each instruction's progress through pipeline stages
     for (const auto& entry : pipeline_history) {
-        std::cout << std::left << std::setw(30) << entry.first << " | ";
+        std::cout << "| " << std::left << std::setw(instr_width) << entry.first;
         
         // Print stages for each cycle, or blank for cycles where this instruction wasn't active
         for (size_t i = 0; i < total_cycles; i++) {
-            if (i < entry.second.size()) {
-                std::cout << std::setw(2) << entry.second[i] << " | ";
-            } else {
-                std::cout << "   | ";
-            }
+            std::cout << "| " << std::setw(cycle_width) << (i < entry.second.size() ? entry.second[i] : " ");
         }
-        std::cout << std::endl;
+        std::cout << " |" << std::endl;
     }
     
-    std::cout << "---------------------------------------------------------------------\n";
+    // Bottom border
+    std::cout << "+" << std::string(instr_width + 2, '-');
+    for (size_t i = 0; i < total_cycles; i++) {
+        std::cout << "+" << std::string(cycle_width + 1, '-');
+    }
+    std::cout << "+" << std::endl;
+    
+    // Statistics
     std::cout << "Total Cycles: " << total_cycles << std::endl;
     std::cout << "Total Instructions Executed: " << executed_instructions << std::endl;
     
@@ -341,10 +379,29 @@ void NoForwardingProcessor::printPipelineDiagram() {
 }
 
 void NoForwardingProcessor::step() {
-    // Execute pipeline stages in reverse order to avoid overwriting
-    write_back();
-    memory_access();
-    execute();
-    decode();
+    // Reset any per-step state
+    static int debug_counter = 0;
+    static int cycle_count = 0;
+    cycle_count++;
+    
+    // Safety mechanism to prevent infinite loops
+    if (debug_counter++ > 100) {
+        std::cout << "Debug safety: Maximum step count reached!" << std::endl;
+        running = false;
+        return;
+    }
+    
+    // Print register values for debugging
+    if (cycle_count % 5 == 0) {  // Print every 5 cycles to reduce output
+        std::cout << "Register values: a0=" << registers.read(10) << ", a7=" << registers.read(17) << std::endl;
+    }
+    
+    // Execute all stages in natural CPU order
     fetch();
+    decode();
+    execute();
+    memory_access();
+    write_back();
+    // Update registers for next cycle
+    update_pipeline_registers();
 }

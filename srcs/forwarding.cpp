@@ -397,37 +397,88 @@ void ForwardingProcessor::run(int cycle_count) {
 }
 
 void ForwardingProcessor::printPipelineDiagram() {
-    std::cout << "Pipeline Execution Diagram (Forwarding)\n";
-    std::cout << "-----------------------------------\n";
-    std::cout << "Cycle | Instruction                   | IF | ID | EX | MEM | WB\n";
-    std::cout << "---------------------------------------------------------------------\n";
+    // Count the number of executed instructions
+    int executed_count = 0;
     
-    // Print pipeline history
-    for (size_t i = 0; i < pipeline_history.size(); i++) {
-        std::cout << std::setw(5) << (i+1) << " | ";
-        
-        // Print each instruction and its progress through pipeline
-        for (size_t j = 0; j < pipeline_history[i].size(); j++) {
-            const auto& instr_state = pipeline_history[i][j];
-            
-            if (j == 0) {
-                // Print instruction mnemonic for the first entry
-                std::cout << std::left << std::setw(30) << instr_state.assembly << " | ";
+    // Create a mapping of instructions to their stages in each cycle
+    std::map<std::string, std::vector<std::string>> instruction_stages;
+    
+    // Process pipeline history to build the mapping
+    for (size_t cycle = 0; cycle < pipeline_history.size(); cycle++) {
+        for (const auto& state : pipeline_history[cycle]) {
+            if (instruction_stages.find(state.assembly) == instruction_stages.end()) {
+                // New instruction - create entry with empty stages up to this cycle
+                instruction_stages[state.assembly] = std::vector<std::string>(cycle, " ");
             }
             
-            // Print stage symbols
-            std::cout << std::setw(2) << instr_state.stage << " | ";
+            // Add this cycle's stage
+            instruction_stages[state.assembly].push_back(state.stage);
+            
+            // Count completed instructions
+            if (state.stage == "WB") {
+                executed_count++;
+            }
         }
-        std::cout << std::endl;
+        
+        // Pad all existing instructions with empty stages for this cycle if they weren't updated
+        for (auto& entry : instruction_stages) {
+            if (entry.second.size() <= cycle) {
+                entry.second.push_back(" ");
+            }
+        }
     }
     
-    std::cout << "---------------------------------------------------------------------\n";
-    std::cout << "Total Cycles: " << pipeline_history.size() << std::endl;
-    std::cout << "Total Instructions Executed: " << executed_instructions << std::endl;
+    // Calculate dimensions
+    const size_t total_cycles = pipeline_history.size();
+    const int instr_width = 30;
+    const int cycle_width = 4;
+    const int total_width = instr_width + 3 + cycle_width * total_cycles + total_cycles + 1;
+    
+    // Print header
+    std::cout << "Pipeline Execution Diagram (Forwarding)\n";
+    std::cout << "-----------------------------------\n";
+    
+    // Print table header with aligned cycle numbers
+    std::cout << "| " << std::left << std::setw(instr_width) << "Instruction";
+    
+    // Print cycle numbers - FIX ALIGNMENT ISSUE
+    for (size_t i = 1; i <= total_cycles; i++) {
+        std::string cycleHeader = "C" + std::to_string(i);
+        std::cout << "| " << std::setw(cycle_width) << cycleHeader;
+    }
+    std::cout << " |" << std::endl;
+    
+    // Separator line
+    std::cout << "+" << std::string(instr_width + 2, '-');
+    for (size_t i = 0; i < total_cycles; i++) {
+        std::cout << "+" << std::string(cycle_width + 1, '-');
+    }
+    std::cout << "+" << std::endl;
+    
+    // Print each instruction's stages
+    for (const auto& entry : instruction_stages) {
+        std::cout << "| " << std::left << std::setw(instr_width) << entry.first;
+        
+        for (const auto& stage : entry.second) {
+            std::cout << "| " << std::setw(cycle_width) << stage;
+        }
+        std::cout << " |" << std::endl;
+    }
+    
+    // Bottom border
+    std::cout << "+" << std::string(instr_width + 2, '-');
+    for (size_t i = 0; i < total_cycles; i++) {
+        std::cout << "+" << std::string(cycle_width + 1, '-');
+    }
+    std::cout << "+" << std::endl;
+    
+    // Statistics
+    std::cout << "Total Cycles: " << total_cycles << std::endl;
+    std::cout << "Total Instructions Executed: " << executed_count << std::endl;
     
     // Calculate CPI
-    if (executed_instructions > 0) {
-        double cpi = static_cast<double>(pipeline_history.size()) / executed_instructions;
+    if (executed_count > 0) {
+        double cpi = static_cast<double>(total_cycles) / executed_count;
         std::cout << "CPI: " << std::fixed << std::setprecision(2) << cpi << std::endl;
     }
 }

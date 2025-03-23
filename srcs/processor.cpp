@@ -65,10 +65,20 @@ void Processor::updateInstructionStage(const std::string& assembly, const std::s
     bool found = false;
     for (auto& entry : pipeline_history) {
         if (entry.first == assembly) {
-            // Only update if this is a new stage for this instruction
-            // (prevents duplicating EX and MEM stages for ECALL)
-            if (entry.second.empty() || entry.second.back() != stage) {
+            // Only update if this is a reasonable next stage
+            // Fix the issue with stages being duplicated or out of order
+            if (entry.second.empty() || isPipelineProgressionValid(entry.second.back(), stage)) {
                 entry.second.push_back(stage);
+            } else {
+                // If we get here with an ECALL that's behaving oddly, just keep the current stage
+                if (assembly == "ecall" && entry.second.back() == stage) {
+                    // Don't add duplicate stages for ECALL
+                } else {
+                    // For non-ECALL instructions, add the stage if different
+                    if (entry.second.back() != stage) {
+                        entry.second.push_back(stage);
+                    }
+                }
             }
             found = true;
             break;
@@ -81,6 +91,19 @@ void Processor::updateInstructionStage(const std::string& assembly, const std::s
         stages.push_back(stage);
         pipeline_history.push_back({assembly, stages});
     }
+}
+
+// Add helper function to check valid pipeline progression
+bool Processor::isPipelineProgressionValid(const std::string& current, const std::string& next) {
+    // Define the valid progression order
+    std::string order = "IF-ID-EX-ME-WB";
+    
+    // Get positions
+    size_t curr_pos = order.find(current);
+    size_t next_pos = order.find(next);
+    
+    // Valid if next stage comes after current stage in the pipeline
+    return (curr_pos != std::string::npos && next_pos != std::string::npos && next_pos > curr_pos);
 }
 
 void Processor::run(int cycles) {
@@ -115,8 +138,8 @@ void Processor::run(int cycles) {
         }
         
         // Prevent infinite loops
-        if (num_cycles >= 100) {
-            std::cout << "Reached maximum cycle limit (100). Stopping." << std::endl;
+        if (num_cycles >= 30) {
+            std::cout << "Reached maximum cycle limit (30). Stopping." << std::endl;
             break;
         }
         
@@ -154,38 +177,57 @@ void Processor::displayPipeline() const {
 void Processor::handle_syscall() {
     // Get syscall number from a7 (x17)
     int syscall_num = registers.read(17); // a7 is x17
+    int a0_value = registers.read(10);    // a0 is x10
     
-    std::cout << "Handling syscall: " << syscall_num << std::endl;
+    std::cout << "SYSCALL " << syscall_num << " (a0=" << a0_value << ")" << std::endl;
     
     switch (syscall_num) {
         case 1: // Print integer
-            std::cout << "Syscall 1 (print_int): " << registers.read(10) << std::endl; // a0 is x10
+            std::cout << "OUTPUT: " << a0_value << std::endl;
             break;
             
-        case 4: { // Print string
-            uint32_t addr = registers.read(10); // String address in a0
-            std::string output;
-            char c;
-            while ((c = data_memory.readByte(addr++)) != 0) {
-                output += c;
+        case 4: // Print string
+            {
+                uint32_t addr = a0_value; // String address in a0
+                std::string output;
+                char c;
+                while ((c = data_memory.readByte(addr++)) != 0) {
+                    output += c;
+                }
+                std::cout << "OUTPUT STRING: " << output << std::endl;
             }
-            std::cout << output;
             break;
-        }
             
         case 10: // Exit program
-            running = false;
             std::cout << "Program exit requested via syscall" << std::endl;
+            running = false;
+            // Clear all pipeline stages immediately
+            if_id.valid = false;
+            id_ex.valid = false;
+            ex_mem.valid = false;
+            mem_wb.valid = false;
             break;
             
-        case 11: { // Print character
-            char c = registers.read(10) & 0xFF; // Get character from a0
-            std::cout << c;
+        case 0: // Likely a register value isn't set yet
+            std::cerr << "Warning: Invalid syscall number 0 - register a7 might not be initialized yet" << std::endl;
             break;
-        }
             
         default:
-            std::cerr << "Unknown syscall: " << syscall_num << std::endl;
+            std::cerr << "Error: Unknown syscall: " << syscall_num << std::endl;
             break;
     }
+}
+
+void Processor::update_pipeline_registers() {
+    // Update all pipeline registers with their next values
+    if_id = next_if_id;
+    id_ex = next_id_ex;
+    ex_mem = next_ex_mem;
+    mem_wb = next_mem_wb;
+    
+    // Clear the next registers for the next cycle
+    next_if_id = IF_ID_Register();
+    next_id_ex = ID_EX_Register();
+    next_ex_mem = EX_MEM_Register();
+    next_mem_wb = MEM_WB_Register();
 }

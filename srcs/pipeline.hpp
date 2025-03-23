@@ -36,11 +36,13 @@ struct ID_EX_Register {
     bool valid;
     std::string stage_display;
     bool is_real_instruction = true;
+    bool ecall_processed = false;  // Track if ECALL has been processed to prevent reprocessing
     
     ID_EX_Register() : reg_write(false), mem_to_reg(false), mem_read(false), mem_write(false),
                        alu_src(false), branch(false), jump(false), pc(0), read_data_1(0), 
                        read_data_2(0), immediate(0), rs1(0), rs2(0), rd(0),
-                       assembly(""), valid(false), stage_display("") {}
+                       assembly(""), valid(false), stage_display(""),
+                       is_real_instruction(true), ecall_processed(false) {}
 };
 
 struct EX_MEM_Register {

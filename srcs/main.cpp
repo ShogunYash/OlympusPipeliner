@@ -17,7 +17,13 @@ std::vector<uint32_t> loadInstructionsFromFile(const std::string& filename) {
         return instructions;
     }
     
+    std::cout << "Reading instructions from file: " << filename << std::endl;
+    std::cout << "----------------------------------------" << std::endl;
+    std::cout << "Address     | Hex Instruction | Assembly" << std::endl;
+    std::cout << "----------------------------------------" << std::endl;
+    
     std::string line;
+    uint32_t index = 0;
     while (std::getline(file, line)) {
         // Skip empty lines and comments
         if (line.empty() || line[0] == '#') continue;
@@ -41,14 +47,27 @@ std::vector<uint32_t> loadInstructionsFromFile(const std::string& filename) {
         }
         
         try {
-            // Convert the hex string to an unsigned 32-bit integer.
+            // Convert the hex string to an unsigned 32-bit integer
             uint32_t instruction = std::stoul(hex_instr, nullptr, 16);
             instructions.push_back(instruction);
+            
+            // Create an instruction object to decode the assembly
+            Instruction instr(instruction);
+            
+            // Print debug information
+            std::cout << address << " | " << hex_instr << " | " << instr.getAssembly() << std::endl;
+            
+            index++;
         } catch (const std::exception& e) {
             std::cerr << "Conversion error for instruction " << hex_instr 
                       << " (" << e.what() << ")" << std::endl;
         }
     }
+    
+    std::cout << "----------------------------------------" << std::endl;
+    std::cout << "Total instructions read: " << instructions.size() << std::endl;
+    std::cout << "----------------------------------------" << std::endl;
+    
     file.close();
     return instructions;
 }
