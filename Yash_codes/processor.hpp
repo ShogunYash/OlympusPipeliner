@@ -1,60 +1,47 @@
-#ifndef PROCESSOR_HPP
-#define PROCESSOR_HPP
-
-#include <vector>
+#pragma once
+#include "Register.hpp"
+#include "Memory.hpp"
+#include "PipelineStages.hpp"
 #include <string>
+#include <vector>
 #include <unordered_map>
-#include "instruction.hpp"
-#include "register_file.hpp"
-#include "memory.hpp"
-#include "pipeline.hpp"
+#include <fstream>
 
-class Processor {
-protected:
-    // Processor state
-    uint32_t pc;              // Program counter
-    bool running;
-    
-    // Components
+class NoForwardingProcessor {
+private:
+    uint32_t pc;
     RegisterFile registers;
-    Memory memory;
-    std::vector<uint32_t> program;
+    Memory dataMemory;
+    std::vector<uint32_t> instructionMemory;
+    std::vector<std::string> instructionStrings;
     
     // Pipeline registers
-    IF_ID_Register if_id;
-    ID_EX_Register id_ex;
-    EX_MEM_Register ex_mem;
-    MEM_WB_Register mem_wb;
+    IFIDRegister ifid;
+    IDEXRegister idex;
+    EXMEMRegister exmem;
+    MEMWBRegister memwb;
     
-    // Memory for data storage
-    std::unordered_map<uint32_t, int32_t> data_memory;
+    // Pipeline history for display
+    std::unordered_map<std::string, std::vector<std::string>> pipelineHistory;
+    std::unordered_map<std::string, uint32_t> instructionPCs;    // Map unique IDs to PCs
+    std::unordered_map<std::string, std::string> instructionTexts; // Map unique IDs to instruction texts
     
-    // Pipeline visualization
-    std::vector<std::pair<std::string, std::vector<std::string>>> pipeline_history;
+    bool stall;
     
-    // Pipeline stage implementation
-    virtual void fetch() = 0;
-    virtual void decode() = 0;
-    virtual void execute() = 0;
-    virtual void memory_access() = 0;
-    virtual void write_back() = 0;
+    // Register In-Use Array: true means the register is pending a write-back.
+    bool regInUse[32];
     
-    // Record pipeline state for visualization
-    void record_pipeline_state();
-    
-public:
-    Processor();
-    virtual ~Processor() = default;
-    
-    // Load program
-    void loadProgram(const std::vector<uint32_t>& instructions);
-    
-    // Run processor
-    virtual void step() = 0;
-    void run(int cycles);
-    
-    // Output pipeline diagram
-    void displayPipeline() const;
-};
+    // Helper functions
+    ControlSignals decodeControlSignals(uint32_t instruction);
+    uint32_t executeALU(uint32_t a, uint32_t b, uint32_t aluOp);
+    void updatePipelineHistory(int cycle);
+    std::string getInstructionString(uint32_t instruction);
+    uint32_t extractImmediate(uint32_t instruction, uint32_t opcode);
 
-#endif // PROCESSOR_HPP
+public:
+    NoForwardingProcessor();
+    bool loadInstructions(const std::string& filename);
+    void run(int cycles);
+    void printPipelineDiagram();
+    size_t getInstructionCount() const { return instructionTexts.size(); }
+};

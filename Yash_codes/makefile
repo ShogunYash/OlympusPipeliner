@@ -1,40 +1,18 @@
-# Makefile for RISC-V Processor Simulator
-
-# Compiler settings
 CXX = g++
-CXXFLAGS = -std=c++11 -Wall -Wextra -g
-LDFLAGS =
+CXXFLAGS = -std=c++17 -Wall -Wextra -pedantic
 
-# Sources for the non-forwarding variant
-NOFWD_SRCS = main.cpp processor.cpp no_forwarding.cpp instruction.cpp register_file.cpp memory.cpp alu.cpp
-NOFWD_OBJS = $(NOFWD_SRCS:.cpp=.o)
+SRCS = main.cpp Processor.cpp Register.cpp Memory.cpp
+OBJS = $(SRCS:.cpp=.o)
+DEPS = Processor.hpp Register.hpp Memory.hpp PipelineStages.hpp
 
-# Sources for the forwarding variant (if implemented)
-FORWARD_SRCS = main.cpp processor.cpp forwarding.cpp instruction.cpp register_file.cpp memory.cpp alu.cpp
-FORWARD_OBJS = $(FORWARD_SRCS:.cpp=.o)
+# Targets
+all: noforward
 
-.PHONY: all clean noforward forward
+noforward: $(OBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $^
 
-# Default: build both variants
-all: noforward forward
-
-# Build the non-forwarding executable (noforward)
-noforward: $(NOFWD_OBJS)
-	$(CXX) $(CXXFLAGS) -o noforward $(NOFWD_OBJS) $(LDFLAGS)
-
-# Build forwarding executable only if forwarding.cpp exists
-ifneq ($(wildcard forwarding.cpp),)
-forward: $(FORWARD_OBJS)
-	$(CXX) $(CXXFLAGS) -o forward $(FORWARD_OBJS) $(LDFLAGS)
-else
-forward:
-	@echo "Forward variant not implemented: forwarding.cpp not found."
-endif
-
-# Generic rule for compiling .cpp files to .o files
-%.o: %.cpp
+%.o: %.cpp $(DEPS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Clean built object files and executables
 clean:
-	rm -f *.o noforward forward
+	rm -f *.o noforward
