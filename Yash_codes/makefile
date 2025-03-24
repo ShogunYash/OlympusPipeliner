@@ -6,13 +6,16 @@ OBJS = $(SRCS:.cpp=.o)
 DEPS = Processor.hpp Register.hpp Memory.hpp PipelineStages.hpp
 
 # Targets
-all: noforward
+all: noforward forward
 
 noforward: $(OBJS)
+	$(CXX) $(CXXFLAGS) -o $@ $^
+
+forward: $(OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 %.o: %.cpp $(DEPS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 clean:
-	rm -f *.o noforward
+	rm -f *.o noforward forward
