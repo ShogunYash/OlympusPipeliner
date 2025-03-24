@@ -1,1 +1,2 @@
 make the instruction index access through the index value of the pipeline.
+In print pipeline check if zero cycles

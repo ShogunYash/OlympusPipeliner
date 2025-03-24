@@ -445,6 +445,9 @@ void NoForwardingProcessor::run(int cycles) {
             pc += 4;
         }
         else if (stall) {
+            int idx = getInstructionIndex(pc);
+            if (idx != -1)
+                recordStage(idx, cycle, IF);
             std::cout << "Cycle " << cycle << " - IF: Stall in effect, instruction remains same" << std::endl;
         }
         else {
@@ -507,11 +510,23 @@ void NoForwardingProcessor::printPipelineDiagram() {
         
         // Print the instruction with fixed width
         outFile << std::left << std::setw(instrColumnWidth) << instr;
+        outFile << "," << stageToString(pipelineMatrix[i][0]);
+        // Store prev stage to check for stall
+        PipelineStage prevStage = pipelineMatrix[i][0];
         
         // Print each cycle's stage
-        for (int j = 0; j < matrixCols; j++) {
-            outFile << "," << stageToString(pipelineMatrix[i][j]);
+        for (int j = 1; j < matrixCols; j++) {
+            if (prevStage == pipelineMatrix[i][j] && pipelineMatrix[i][j]!= SPACE) {
+                outFile << "," << stageToString(STALL);
+            }
+            else {
+                outFile << "," << stageToString(pipelineMatrix[i][j]);
+                prevStage = pipelineMatrix[i][j];
+            }
         }
+        // for (int j = 0; j < matrixCols; j++) {            
+        //     outFile << "," << stageToString(pipelineMatrix[i][j]);
+        // }
         outFile << "," << std::endl;
     }
     outFile.close();
