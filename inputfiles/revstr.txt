@@ -6,7 +6,6 @@ ff010113;addi x2 x2 -16
 04c080e7;jalr x1 x1 76
 40155293;srai x5 x10 1
 00000313;addi x6 x0 0
-02535663;bge x6 x5 44
 006483b3;add x7 x9 x6
 40650e33;sub x28 x10 x6
 fffe0e13;addi x28 x28 -1

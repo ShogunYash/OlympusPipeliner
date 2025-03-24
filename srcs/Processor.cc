@@ -261,7 +261,6 @@ void NoForwardingProcessor::run(int cycles) {
             if (memwb.controls.regWrite && memwb.rd != 0) {
                 int32_t writeData = memwb.controls.memToReg ? memwb.readData : memwb.aluResult;
                 registers.write(memwb.rd, writeData);
-                regInUse[memwb.rd] = false;
                 clearRegisterUsage(memwb.rd);
                 std::cout << "         Written " << writeData << " to register x" << memwb.rd << std::endl;
             }
@@ -386,14 +385,14 @@ void NoForwardingProcessor::run(int cycles) {
                      opcode == 0x03 || // LOAD
                      opcode == 0x13) { // I-type ALU
                 // Only check rs1 for hazard
-                hazard = (rs1 != 0 && regInUse[rs1] && isRegisterUsedBy(rs1));
+                hazard = (rs1 != 0 && isRegisterUsedBy(rs1));
             }
             // Instructions with both rs1 and rs2 dependencies
             else if (opcode == 0x33 || // R-type ALU
                      opcode == 0x23 || // STORE
                      opcode == 0x63) { // BRANCH
                 // Check both rs1 and rs2 for hazards
-                hazard = ((rs1 != 0 && regInUse[rs1] && isRegisterUsedBy(rs1)) || (rs2 != 0 && regInUse[rs2] && isRegisterUsedBy(rs2)));
+                hazard = ((rs1 != 0 && isRegisterUsedBy(rs1)) || (rs2 != 0 && isRegisterUsedBy(rs2)));
             }
 
             if (!hazard) {
@@ -410,9 +409,8 @@ void NoForwardingProcessor::run(int cycles) {
                 idex.isEmpty = false;
                 idex.isStalled = false;
                 if (idex.controls.regWrite && rd != 0) {
-                    regInUse[rd] = true;
                     addRegisterUsage(rd);
-                    std::cout << "         Marking register x" << rd << " as busy" << std::endl;
+                    std::cout << "         Marking register x" << rd << " as busy "<< " size: "<< regUsageTracker[rd].size() << std::endl;
                 }
             }
             else {
@@ -420,11 +418,11 @@ void NoForwardingProcessor::run(int cycles) {
                 ifid.isStalled = true;
                 idex.isEmpty = true;
                 std::cout << "         Hazard detected: Stalling pipeline." << std::endl;
-                if (rs1 != 0 && regInUse[rs1] && isRegisterUsedBy(rs1))
-                    std::cout << "         Register x" << rs1 << " is in use" << std::endl;
-                if (rs2 != 0 && regInUse[rs2] &&  isRegisterUsedBy(rs2) &&
+                if (rs1 != 0 && isRegisterUsedBy(rs1))
+                    std::cout << "         Register x" << rs1 << " is in use"<< " size: "<< regUsageTracker[rd].size() << std::endl;
+                if (rs2 != 0 && isRegisterUsedBy(rs2) &&
                     (opcode == 0x33 || opcode == 0x23 || opcode == 0x63))
-                    std::cout << "         Register x" << rs2 << " is in use" << std::endl;
+                    std::cout << "         Register x" << rs2 << " is in use"<< " size: "<< regUsageTracker[rd].size() << std::endl;
             }
         }
         else {
@@ -458,7 +456,6 @@ void NoForwardingProcessor::run(int cycles) {
         if (branchTaken) {
             pc = branchTarget;
             // Make registers in use available for writing of ID stage ones.
-            regInUse[idex.rd] = false;
             clearRegisterUsage(idex.rd);
             ifid.isEmpty = true;
             idex.isEmpty = true;
