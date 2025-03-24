@@ -1,4 +1,4 @@
-#include "ProcessorForward.hpp"
+#include "ForwardingProcessor.hpp"
 #include <iostream>
 #include <string>
 
