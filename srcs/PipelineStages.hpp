@@ -16,7 +16,7 @@ struct ControlSignals {
 
 // IF/ID Pipeline Register
 struct IFIDRegister {
-    uint32_t pc;
+    int32_t pc;                   // Changed from uint32_t to int32_t
     uint32_t instruction;         // Raw machine code.
     std::string instructionString;
     bool isStalled;
@@ -27,11 +27,11 @@ struct IFIDRegister {
 
 // ID/EX Pipeline Register
 struct IDEXRegister {
-    uint32_t pc;
+    int32_t pc;                   // Changed from uint32_t to int32_t
     uint32_t instruction;         // Propagated raw machine code.
-    uint32_t readData1;
-    uint32_t readData2;
-    uint32_t imm;
+    int32_t readData1;
+    int32_t readData2;
+    int32_t imm;
     uint32_t rs1;
     uint32_t rs2;
     uint32_t rd;
@@ -46,10 +46,10 @@ struct IDEXRegister {
 
 // EX/MEM Pipeline Register
 struct EXMEMRegister {
-    uint32_t pc;
+    int32_t pc;                   // Changed from uint32_t to int32_t
     uint32_t instruction;         // Propagated raw machine code.
-    uint32_t aluResult;
-    uint32_t readData2;
+    int32_t aluResult;
+    int32_t readData2;
     uint32_t rd;
     ControlSignals controls;
     std::string instructionString;
@@ -61,10 +61,10 @@ struct EXMEMRegister {
 
 // MEM/WB Pipeline Register
 struct MEMWBRegister {
-    uint32_t pc;
+    int32_t pc;                   // Changed from uint32_t to int32_t
     uint32_t instruction;         // Propagated raw machine code.
-    uint32_t aluResult;
-    uint32_t readData;
+    int32_t aluResult;
+    int32_t readData;
     uint32_t rd;
     ControlSignals controls;
     std::string instructionString;

@@ -201,7 +201,7 @@ bool NoForwardingProcessor::loadInstructions(const std::string& filename) {
         instructionMemory.push_back(instruction);
         instructionStrings.push_back(instructionDesc.empty() ? hexCode : instructionDesc);
     }
-    std::cout << "Loaded " << instructionMemory.size() << " instructions." << std::endl;
+    std::cout << "Loaded " << instructionMemory.size() << " instructions."<< " Instruction strings size: "<<instructionStrings.size() << std::endl;
     return !instructionMemory.empty();
 }
 
@@ -241,7 +241,7 @@ void NoForwardingProcessor::run(int cycles) {
             if (idx != -1)
                 recordStage(idx, cycle, WB);
             if (memwb.controls.regWrite && memwb.rd != 0) {
-                uint32_t writeData = memwb.controls.memToReg ? memwb.readData : memwb.aluResult;
+                int32_t writeData = memwb.controls.memToReg ? memwb.readData : memwb.aluResult;
                 registers.write(memwb.rd, writeData);
                 regInUse[memwb.rd] = false;
                 std::cout << "         Written " << writeData << " to register x" << memwb.rd << std::endl;
@@ -317,7 +317,7 @@ void NoForwardingProcessor::run(int cycles) {
             else if (opcode == 0x67) {  // JALR
                 branchTaken = true;
                 branchTarget = (idex.readData1 + idex.imm) & ~1;
-                std::cout << "         JALR: Jump to PC: " << branchTarget << std::endl;
+                std::cout <<"-> Return register data "<<idex.readData1 <<"         JALR: Jump to PC: " << branchTarget << std::endl;
             }
             exmem.pc = idex.pc;
             exmem.readData2 = idex.readData2;
@@ -344,7 +344,32 @@ void NoForwardingProcessor::run(int cycles) {
             uint32_t rs1 = (instruction >> 15) & 0x1F;
             uint32_t rs2 = (instruction >> 20) & 0x1F;
             int32_t imm = extractImmediate(instruction, opcode);  // Changed to signed 32-bit
-            bool hazard = ((rs1 != 0 && regInUse[rs1]) || (rs2 != 0 && regInUse[rs2]));
+            
+            // More precise hazard detection based on instruction type
+            bool hazard = false;
+            
+            // Instructions with no source register dependencies
+            if (opcode == 0x6F || // JAL
+                opcode == 0x37 || // LUI
+                opcode == 0x17) { // AUIPC
+                // No source registers used, no hazard possible
+                hazard = false;
+            }
+            // Instructions with only rs1 dependency
+            else if (opcode == 0x67 || // JALR
+                     opcode == 0x03 || // LOAD
+                     opcode == 0x13) { // I-type ALU
+                // Only check rs1 for hazard
+                hazard = (rs1 != 0 && regInUse[rs1]);
+            }
+            // Instructions with both rs1 and rs2 dependencies
+            else if (opcode == 0x33 || // R-type ALU
+                     opcode == 0x23 || // STORE
+                     opcode == 0x63) { // BRANCH
+                // Check both rs1 and rs2 for hazards
+                hazard = ((rs1 != 0 && regInUse[rs1]) || (rs2 != 0 && regInUse[rs2]));
+            }
+
             if (!hazard) {
                 idex.readData1 = registers.read(rs1);
                 idex.readData2 = registers.read(rs2);
@@ -368,6 +393,11 @@ void NoForwardingProcessor::run(int cycles) {
                 ifid.isStalled = true;
                 idex.isEmpty = true;
                 std::cout << "         Hazard detected: Stalling pipeline." << std::endl;
+                if (rs1 != 0 && regInUse[rs1])
+                    std::cout << "         Register x" << rs1 << " is in use" << std::endl;
+                if (rs2 != 0 && regInUse[rs2] && 
+                    (opcode == 0x33 || opcode == 0x23 || opcode == 0x63))
+                    std::cout << "         Register x" << rs2 << " is in use" << std::endl;
             }
         }
         else {

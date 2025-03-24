@@ -1,0 +1,1 @@
+make the instruction index access through the index value of the pipeline.
