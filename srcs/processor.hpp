@@ -10,7 +10,8 @@
 // Enumeration for pipeline stages.
 // We use STALL to indicate either a stall or an empty cell.
 enum PipelineStage {
-    STALL = 0,
+    SPACE=0,  // Empty cell in the pipeline diagram
+    STALL,
     IF,
     ID,
     EX,

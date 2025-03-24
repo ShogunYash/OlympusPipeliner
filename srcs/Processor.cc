@@ -225,7 +225,7 @@ void NoForwardingProcessor::run(int cycles) {
     pipelineMatrix = (PipelineStage**)malloc(matrixRows * sizeof(PipelineStage*));
     for (int i = 0; i < matrixRows; i++) {
         pipelineMatrix[i] = (PipelineStage*)malloc(matrixCols * sizeof(PipelineStage));
-        memset(pipelineMatrix[i], STALL, matrixCols * sizeof(PipelineStage)); // initialize all cells to STALL marker
+        memset(pipelineMatrix[i], SPACE, matrixCols * sizeof(PipelineStage)); // initialize all cells to STALL marker
     }
     
     // Simulation loop.
@@ -418,7 +418,7 @@ void NoForwardingProcessor::run(int cycles) {
 // ---------------------- Print Pipeline Diagram ----------------------
 
 void NoForwardingProcessor::printPipelineDiagram() {
-    std::ofstream outFile("output.txt");
+    std::ofstream outFile("output.csv");
     if (!outFile.is_open()) {
         std::cerr << "Error: Unable to open output.txt for writing" << std::endl;
         return;
