@@ -57,6 +57,10 @@ private:
     // Register In-Use Array: true means the register is pending a write-back.
     bool regInUse[32];
     
+    // Advanced register usage tracking: vector of vectors to track which instruction uses each register
+    // First dimension is register number (0-31), second dimension is variable-length list of instruction IDs
+    std::vector<std::vector<bool>> regUsageTracker;
+    
     // Helper functions
     ControlSignals decodeControlSignals(uint32_t instruction);
     int32_t executeALU(int32_t a, int32_t b, uint32_t aluOp);  // Changed to signed 32-bit
@@ -67,11 +71,20 @@ private:
     // 'cycle' is the current cycle.
     void recordStage(int instrIndex, int cycle, PipelineStage stage);
     
-    // Helper: returns the index of the given instruction string (or -1 if not found).
-    int getInstructionIndex(const std::string &instrStr) const;
+    // Helper: returns the index of the given pc in that stage
+    int getInstructionIndex(int32_t index) const;
     
     // Free the pipeline matrix.
     void freePipelineMatrix();
+    
+    // New helper function to check if a register is used by a specific instruction
+    bool isRegisterUsedBy(uint32_t regNum) const;
+    
+    // New helper function to add tracking of register usage
+    void addRegisterUsage(uint32_t regNum);
+    
+    // New helper function to clear register usage when instruction completes
+    void clearRegisterUsage(uint32_t regNum);
 
 public:
     NoForwardingProcessor();
