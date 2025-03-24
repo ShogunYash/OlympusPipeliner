@@ -134,14 +134,12 @@ void NoForwardingProcessor::recordStage(int instrIndex, int cycle, PipelineStage
     pipelineMatrix[instrIndex][cycle] = stage;
 }
 
-// Return the index of an instruction string in instructionStrings.
-// (Assumes instructions are unique or in program order.)
-int NoForwardingProcessor::getInstructionIndex(const std::string &instrStr) const {
-    for (size_t i = 0; i < instructionStrings.size(); i++) {
-        if (instructionStrings[i] == instrStr)
-            return static_cast<int>(i);
-    }
-    return -1;
+// Return the index of an instruction correspondin to pc in instructionStrings.
+// (Assumes instructions are in program order.)
+int NoForwardingProcessor::getInstructionIndex(int32_t index) const {
+    if (index < 0 || (index/4) >= static_cast<int32_t>(instructionStrings.size()))
+        return -1;
+    return static_cast<int>(index / 4);
 }
 
 // Free the dynamically allocated pipeline matrix.
@@ -155,12 +153,32 @@ void NoForwardingProcessor::freePipelineMatrix() {
     }
 }
 
+// ---------------------- Register Usage Tracker Functions ----------------------
+
+bool NoForwardingProcessor::isRegisterUsedBy(uint32_t regNum) const {
+    // Check if instrIndex exists in the usage list for the register
+    if (regUsageTracker[regNum].empty()) return false;
+    return true;
+}
+
+void NoForwardingProcessor::addRegisterUsage(uint32_t regNum) { 
+    // Add the true usage flag to the register's usage list
+    regUsageTracker[regNum].push_back(true);
+}
+
+void NoForwardingProcessor::clearRegisterUsage(uint32_t regNum) {
+    // Remove the instruction index from this register's usage list
+    regUsageTracker[regNum].pop_back();
+}
+
 // ---------------------- Constructor/Destructor ----------------------
 
 NoForwardingProcessor::NoForwardingProcessor() : 
     pc(0), 
     pipelineMatrix(nullptr),  // Initialize pipelineMatrix first
-    stall(false)              // Now initialize stall
+    stall(false),              // Now initialize stall
+// Initialize register usage tracker with 32 empty vectors
+    regUsageTracker(32)
 {
     std::fill(std::begin(regInUse), std::end(regInUse), false);
 }
@@ -169,7 +187,7 @@ NoForwardingProcessor::~NoForwardingProcessor() {
     freePipelineMatrix();
 }
 
-// ---------------------- Instruction Loading ----------------------
+// ---------------------- Instruction Loading ---------------------- 
 
 bool NoForwardingProcessor::loadInstructions(const std::string& filename) {
     std::ifstream file(filename);
@@ -237,13 +255,14 @@ void NoForwardingProcessor::run(int cycles) {
         // -------------------- WB Stage --------------------
         if (!memwb.isEmpty) {
             std::cout << "Cycle " << cycle << " - WB: Processing " << memwb.instructionString << " at PC: " << memwb.pc << std::endl;
-            int idx = getInstructionIndex(memwb.instructionString);
+            int idx = getInstructionIndex(memwb.pc);
             if (idx != -1)
                 recordStage(idx, cycle, WB);
             if (memwb.controls.regWrite && memwb.rd != 0) {
                 int32_t writeData = memwb.controls.memToReg ? memwb.readData : memwb.aluResult;
                 registers.write(memwb.rd, writeData);
                 regInUse[memwb.rd] = false;
+                clearRegisterUsage(memwb.rd);
                 std::cout << "         Written " << writeData << " to register x" << memwb.rd << std::endl;
             }
         }
@@ -254,7 +273,7 @@ void NoForwardingProcessor::run(int cycles) {
         // -------------------- MEM Stage --------------------
         if (!exmem.isEmpty) {
             std::cout << "Cycle " << cycle << " - MEM: Processing " << exmem.instructionString << " at PC: " << exmem.pc << std::endl;
-            int idx = getInstructionIndex(exmem.instructionString);
+            int idx = getInstructionIndex(exmem.pc);
             if (idx != -1)
                 recordStage(idx, cycle, MEM);
             if (exmem.controls.memRead) {
@@ -281,14 +300,17 @@ void NoForwardingProcessor::run(int cycles) {
         // -------------------- EX Stage --------------------
         if (!idex.isEmpty) {
             std::cout << "Cycle " << cycle << " - EX: Processing " << idex.instructionString << " at PC: " << idex.pc << std::endl;
-            int idx = getInstructionIndex(idex.instructionString);
+            int idx = getInstructionIndex(idex.pc);
             if (idx != -1)
                 recordStage(idx, cycle, EX);
             int32_t aluOp1 = idex.readData1;  // Changed to signed 32-bit
             int32_t aluOp2 = idex.controls.aluSrc ? idex.imm : idex.readData2;  // Changed to signed 32-bit
-            exmem.aluResult = executeALU(aluOp1, aluOp2, idex.controls.aluOp);
-            std::cout << "         ALU operation result: " << exmem.aluResult << std::endl;
             uint32_t opcode = idex.instruction & 0x7F;
+            if(opcode != 0x67) // JALR
+                exmem.aluResult = executeALU(aluOp1, aluOp2, idex.controls.aluOp);
+            else 
+                exmem.aluResult = idex.pc + 4;    // PC+4 for JALR
+            std::cout << "         ALU operation result: " << exmem.aluResult << std::endl;
             if (opcode == 0x63) {  // Branch
                 bool condition = false;
                 uint32_t funct3 = (idex.instruction >> 12) & 0x7;
@@ -319,6 +341,10 @@ void NoForwardingProcessor::run(int cycles) {
                 branchTarget = (idex.readData1 + idex.imm) & ~1;
                 std::cout <<"-> Return register data "<<idex.readData1 <<"         JALR: Jump to PC: " << branchTarget << std::endl;
             }
+            else if (opcode == 0x17){ // AUIPC
+                exmem.aluResult = idex.pc + idex.imm;
+                std::cout << "         AUIPC: Jump to PC: " << exmem.aluResult << std::endl;
+            }
             exmem.pc = idex.pc;
             exmem.readData2 = idex.readData2;
             exmem.rd = idex.rd;
@@ -335,7 +361,7 @@ void NoForwardingProcessor::run(int cycles) {
         // -------------------- ID Stage --------------------
         if (!ifid.isEmpty) {
             std::cout << "Cycle " << cycle << " - ID: Processing " << ifid.instructionString << " at PC: " << ifid.pc << std::endl;
-            int idx = getInstructionIndex(ifid.instructionString);
+            int idx = getInstructionIndex(ifid.pc);
             if (idx != -1)
                 recordStage(idx, cycle, ID);
             uint32_t instruction = ifid.instruction;
@@ -360,14 +386,14 @@ void NoForwardingProcessor::run(int cycles) {
                      opcode == 0x03 || // LOAD
                      opcode == 0x13) { // I-type ALU
                 // Only check rs1 for hazard
-                hazard = (rs1 != 0 && regInUse[rs1]);
+                hazard = (rs1 != 0 && regInUse[rs1] && isRegisterUsedBy(rs1));
             }
             // Instructions with both rs1 and rs2 dependencies
             else if (opcode == 0x33 || // R-type ALU
                      opcode == 0x23 || // STORE
                      opcode == 0x63) { // BRANCH
                 // Check both rs1 and rs2 for hazards
-                hazard = ((rs1 != 0 && regInUse[rs1]) || (rs2 != 0 && regInUse[rs2]));
+                hazard = ((rs1 != 0 && regInUse[rs1] && isRegisterUsedBy(rs1)) || (rs2 != 0 && regInUse[rs2] && isRegisterUsedBy(rs2)));
             }
 
             if (!hazard) {
@@ -385,6 +411,7 @@ void NoForwardingProcessor::run(int cycles) {
                 idex.isStalled = false;
                 if (idex.controls.regWrite && rd != 0) {
                     regInUse[rd] = true;
+                    addRegisterUsage(rd);
                     std::cout << "         Marking register x" << rd << " as busy" << std::endl;
                 }
             }
@@ -393,9 +420,9 @@ void NoForwardingProcessor::run(int cycles) {
                 ifid.isStalled = true;
                 idex.isEmpty = true;
                 std::cout << "         Hazard detected: Stalling pipeline." << std::endl;
-                if (rs1 != 0 && regInUse[rs1])
+                if (rs1 != 0 && regInUse[rs1] && isRegisterUsedBy(rs1))
                     std::cout << "         Register x" << rs1 << " is in use" << std::endl;
-                if (rs2 != 0 && regInUse[rs2] && 
+                if (rs2 != 0 && regInUse[rs2] &&  isRegisterUsedBy(rs2) &&
                     (opcode == 0x33 || opcode == 0x23 || opcode == 0x63))
                     std::cout << "         Register x" << rs2 << " is in use" << std::endl;
             }
@@ -413,7 +440,7 @@ void NoForwardingProcessor::run(int cycles) {
             ifid.instructionString = instructionStrings[pc / 4];
             ifid.isEmpty = false;
             ifid.isStalled = false;
-            int idx = getInstructionIndex(ifid.instructionString);
+            int idx = getInstructionIndex(ifid.pc);
             if (idx != -1)
                 recordStage(idx, cycle, IF);
             std::cout << "Cycle " << cycle << " - IF: Fetched " << ifid.instructionString << " at PC: " << pc << std::endl;
@@ -432,6 +459,7 @@ void NoForwardingProcessor::run(int cycles) {
             pc = branchTarget;
             // Make registers in use available for writing of ID stage ones.
             regInUse[idex.rd] = false;
+            clearRegisterUsage(idex.rd);
             ifid.isEmpty = true;
             idex.isEmpty = true;
             std::cout << "         Flushing pipeline due to branch/jump" << std::endl;
