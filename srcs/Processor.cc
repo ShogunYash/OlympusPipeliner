@@ -423,23 +423,41 @@ void NoForwardingProcessor::printPipelineDiagram() {
         std::cerr << "Error: Unable to open output.txt for writing" << std::endl;
         return;
     }
-    // Print header.
-    outFile << "Instruction";
-    for (int i = 0; i < matrixCols; i++) {
-        outFile << ";" << i;
+    
+    // Find the longest instruction string to determine column width
+    size_t maxInstrLength = 0;
+    for (const auto& instr : instructionStrings) {
+        std::string cleanInstr = instr;
+        cleanInstr.erase(std::remove(cleanInstr.begin(), cleanInstr.end(), '\n'), cleanInstr.end());
+        cleanInstr.erase(std::remove(cleanInstr.begin(), cleanInstr.end(), '\r'), cleanInstr.end());
+        maxInstrLength = std::max(maxInstrLength, cleanInstr.length());
     }
-    outFile << ";" << std::endl;
-    // For each instruction (row), print the stage per cycle.
-    for (int i = 0; i < matrixRows; i++) {
+    
+    // Set a minimum width for the instruction column (at least 20 characters)
+    const size_t instrColumnWidth = std::max(maxInstrLength, static_cast<size_t>(20));
+    
+    // Print header with fixed width
+    outFile << std::left << std::setw(instrColumnWidth) << "Instruction";
+    for (int i = 0; i < matrixCols; i++) {
+        outFile << "," << i;
+    }
+    outFile << "," << std::endl;
+    
+    // For each instruction (row), print the stage per cycle with fixed width
+    for (int i = 0; i < matrixRows; i++) {  
         std::string instr = instructionStrings[i];
-        // Clean the instruction text.
+        // Clean the instruction text
         instr.erase(std::remove(instr.begin(), instr.end(), '\n'), instr.end());
         instr.erase(std::remove(instr.begin(), instr.end(), '\r'), instr.end());
-        outFile << instr;
+        
+        // Print the instruction with fixed width
+        outFile << std::left << std::setw(instrColumnWidth) << instr;
+        
+        // Print each cycle's stage
         for (int j = 0; j < matrixCols; j++) {
-            outFile << ";" << stageToString(pipelineMatrix[i][j]);
+            outFile << "," << stageToString(pipelineMatrix[i][j]);
         }
-        outFile << ";" << std::endl;
+        outFile << "," << std::endl;
     }
     outFile.close();
 }

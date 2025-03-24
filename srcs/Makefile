@@ -1,35 +1,18 @@
-# Makefile for RISC-V processor simulator
-
 CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -g
+CXXFLAGS = -std=c++17 -Wall -Wextra -pedantic
+
+SRCS = main.cpp Processor.cpp Register.cpp Memory.cpp
+OBJS = $(SRCS:.cpp=.o)
+DEPS = Processor.hpp Register.hpp Memory.hpp PipelineStages.hpp
 
 # Targets
-all: noforward forward
+all: noforward
 
-noforward: noforward.o processor.o no_forwarding_processor.o
+noforward: $(OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
-forward: forward.o processor.o forwarding_processor.o
-	$(CXX) $(CXXFLAGS) -o $@ $^
+%.o: %.cpp $(DEPS)
+	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-# Object files
-noforward.o: noforward.cpp no_forwarding_processor.hpp processor.hpp
-	$(CXX) $(CXXFLAGS) -c $<
-
-forward.o: forward.cpp forwarding_processor.hpp processor.hpp
-	$(CXX) $(CXXFLAGS) -c $<
-
-processor.o: processor.cpp processor.hpp
-	$(CXX) $(CXXFLAGS) -c $<
-
-no_forwarding_processor.o: no_forwarding_processor.cpp no_forwarding_processor.hpp processor.hpp
-	$(CXX) $(CXXFLAGS) -c $<
-
-forwarding_processor.o: forwarding_processor.cpp forwarding_processor.hpp processor.hpp
-	$(CXX) $(CXXFLAGS) -c $<
-
-# Clean
 clean:
-	rm -f *.o noforward forward
-
-.PHONY: all clean
+	rm -f *.o noforward

@@ -1,123 +1,82 @@
-// processor.hpp - Base processor class
-#ifndef PROCESSOR_HPP
-#define PROCESSOR_HPP
-
+#pragma once
+#include "Register.hpp"
+#include "Memory.hpp"
+#include "PipelineStages.hpp"  // if you still use your old pipeline register structs
 #include <string>
 #include <vector>
-#include <fstream>
-#include <iostream>
-#include <iomanip>
-#include <unordered_map>
-#include <memory>
+#include <cstdlib>     // for malloc/free
+#include <cstring>     // for memset
 
-// Forward declarations
-class Stage;
-
-// Control signals struct
-struct ControlSignals {
-    bool regWrite = false;
-    bool memRead = false;
-    bool memWrite = false;
-    bool branch = false;
-    bool jump = false;
-    bool aluSrc = false;
-    int aluOp = 0;
-    bool memToReg = false;
-    // Add more signals as needed
+// Enumeration for pipeline stages.
+// We use STALL to indicate either a stall or an empty cell.
+enum PipelineStage {
+    STALL = 0,
+    IF,
+    ID,
+    EX,
+    MEM,
+    WB
 };
 
-// Pipeline register struct
-struct PipelineRegister {
-    uint32_t pc = 0;
-    uint32_t instruction = 0;
-    int rs1 = 0;
-    int rs2 = 0;
-    int rd = 0;
-    int32_t rs1Value = 0;
-    int32_t rs2Value = 0;
-    int32_t immediate = 0;
-    int32_t aluResult = 0;
-    int32_t memoryData = 0;
-    ControlSignals controlSignals;
-    std::string instructionString = "";
-    bool stall = false;
-    bool flush = false;
-    bool aluSrc;
-};
+// Helper function to convert enum value to printable string.
+inline const char* stageToString(PipelineStage stage) {
+    switch (stage) {
+        case IF:   return "IF";
+        case ID:   return "ID";
+        case EX:   return "EX";
+        case MEM:  return "ME";
+        case WB:   return "WB";
+        case STALL: return "- ";
+        default:   return "  ";
+    }
+}
 
-// Base Processor class
-class Processor {
-protected:
-    // Registers
-    int32_t registers[32] = {0};
+class NoForwardingProcessor {
+private:
+    int32_t pc;  // Changed to signed 32-bit
+    RegisterFile registers;
+    Memory dataMemory;
+    std::vector<uint32_t> instructionMemory;
+    std::vector<std::string> instructionStrings;
     
-    // Memory (simplified)
-    std::unordered_map<uint32_t, int32_t> memory;
+    // Pipeline registers (structs defined in PipelineStages.hpp)
+    IFIDRegister ifid;
+    IDEXRegister idex;
+    EXMEMRegister exmem;
+    MEMWBRegister memwb;
     
-    // Pipeline stages
-    std::unique_ptr<Stage> ifStage;
-    std::unique_ptr<Stage> idStage;
-    std::unique_ptr<Stage> exStage;
-    std::unique_ptr<Stage> memStage;
-    std::unique_ptr<Stage> wbStage;
+    // Instead of a history map, we use a matrix allocated with malloc.
+    // Rows correspond to instructions (in program order) and columns to cycle numbers.
+    PipelineStage** pipelineMatrix; 
+    int matrixRows;   // equal to number of instructions loaded
+    int matrixCols;   // equal to the number of cycles (set when run() is called)
     
-    // Pipeline registers
-    PipelineRegister if_id;
-    PipelineRegister id_ex;
-    PipelineRegister ex_mem;
-    PipelineRegister mem_wb;
+    bool stall;
     
-    // Program counter
-    uint32_t pc = 0;
+    // Register In-Use Array: true means the register is pending a write-back.
+    bool regInUse[32];
     
-    // Input file
-    std::ifstream instructionFile;
+    // Helper functions
+    ControlSignals decodeControlSignals(uint32_t instruction);
+    int32_t executeALU(int32_t a, int32_t b, uint32_t aluOp);  // Changed to signed 32-bit
+    int32_t extractImmediate(uint32_t instruction, uint32_t opcode);  // Changed to signed 32-bit
     
-    // Instruction memory
-    std::vector<std::pair<uint32_t, std::string>> instructions;
+    // Helper to record a stage in the pipeline matrix.
+    // 'instrIndex' is the row index (the instruction’s program order index)
+    // 'cycle' is the current cycle.
+    void recordStage(int instrIndex, int cycle, PipelineStage stage);
     
-    // For visualization
-    std::vector<std::vector<std::string>> pipelineVisualization;
+    // Helper: returns the index of the given instruction string (or -1 if not found).
+    int getInstructionIndex(const std::string &instrStr) const;
     
-    // Is a branch taken?
-    bool branchTaken = false;
-    
-    // Instruction map for visualization
-    std::unordered_map<uint32_t, std::string> instructionMap;
-    
+    // Free the pipeline matrix.
+    void freePipelineMatrix();
+
 public:
-    Processor(const std::string& filename);
-    virtual ~Processor() = default;
-    
-    // Initialize processor
-    virtual void initialize();
-    
-    // Run the processor for a number of cycles
+    NoForwardingProcessor();
+    ~NoForwardingProcessor();  // Destructor to free memory
+    bool loadInstructions(const std::string& filename);
     void run(int cycles);
-    
-    // Load instructions from file
-    void loadInstructions(const std::string& filename);
-    
-    // Print the pipeline visualization
-    void printPipelineVisualization();
-    
-    // Virtual methods to be implemented by derived classes
-    virtual void advancePipeline() = 0;
-    virtual void handleHazards() = 0;
-    
-    // Base stage functions
-    void fetchInstruction();
-    void decodeInstruction();
-    void executeInstruction();
-    void memoryAccess();
-    void writeBack();
-    
-    // Utility functions
-    int32_t getRegister(int index) const;
-    void setRegister(int index, int32_t value);
-    int32_t getMemory(uint32_t address) const;
-    void setMemory(uint32_t address, int32_t value);
-    std::string getInstructionString(uint32_t instruction);
+    void printPipelineDiagram(); // Print pipeline diagram to file
+    size_t getInstructionCount() const { return instructionStrings.size(); }
 };
-
-#endif // PROCESSOR_HPP
