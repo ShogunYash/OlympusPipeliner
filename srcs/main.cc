@@ -21,7 +21,7 @@ int main(int argc, char** argv) {
     processor.run(cycleCount);
     
     // Print pipeline diagram to file only
-    processor.printPipelineDiagram();
+    processor.printPipelineDiagram(inputFile);
     
     return 0;
 }

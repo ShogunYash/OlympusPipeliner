@@ -362,25 +362,28 @@ void NoForwardingProcessor::run(int cycles) {
             int idx = getInstructionIndex(idex.pc);
             if (idx != -1)
                 recordStage(idx, cycle, EX);
-            int32_t aluOp1 = idex.readData1;  // Changed to signed 32-bit
-            int32_t aluOp2 = idex.controls.aluSrc ? idex.imm : idex.readData2;  // Changed to signed 32-bit
+                
+            int32_t aluOp1 = idex.readData1;
+            int32_t aluOp2 = idex.controls.aluSrc ? idex.imm : idex.readData2;
             uint32_t opcode = idex.instruction & 0x7F;
-            if  (opcode == 0x67 || opcode == 0x6F) // JALR or JAL
-                exmem.aluResult = idex.pc + 4;    // PC+4 for return address
+            
+            
+            // For AUIPC, override the ALU result
+            if (opcode == 0x17) { // AUIPC
+                exmem.aluResult = idex.pc + idex.imm;
+                std::cout << "         AUIPC: PC + imm = " << exmem.aluResult << std::endl;
+            }
+            // For JALR and JAL, override the ALU result
+            else if (opcode == 0x67 || opcode == 0x6F) {
+                exmem.aluResult = idex.aluResult;
+                std::cout << "         Setting return address (PC+4): " << exmem.aluResult << std::endl;
+            }
+            // Only handle ALU operations here, branch/jump is already handled in ID stage
             else {
                 exmem.aluResult = executeALU(aluOp1, aluOp2, idex.controls.aluOp);
             }
-
             std::cout << "         ALU operation result: " << exmem.aluResult << std::endl;
             
-            // Use the new function to handle branch and jump instructions
-            branchTaken = handleBranchAndJump(opcode, idex.instruction, idex.readData1, 
-                                             idex.imm, idex.pc, idex.readData2, branchTarget);
-                                             
-            if (opcode == 0x17){ // AUIPC
-                exmem.aluResult = idex.pc + idex.imm;
-                std::cout << "         AUIPC: Jump to PC: " << exmem.aluResult << std::endl;
-            }
             exmem.pc = idex.pc;
             exmem.readData2 = idex.readData2;
             exmem.rd = idex.rd;
@@ -400,12 +403,17 @@ void NoForwardingProcessor::run(int cycles) {
             int idx = getInstructionIndex(ifid.pc);
             if (idx != -1)
                 recordStage(idx, cycle, ID);
+                
             uint32_t instruction = ifid.instruction;
             uint32_t opcode = instruction & 0x7F;
             uint32_t rd  = (instruction >> 7) & 0x1F;
             uint32_t rs1 = (instruction >> 15) & 0x1F;
             uint32_t rs2 = (instruction >> 20) & 0x1F;
-            int32_t imm = extractImmediate(instruction, opcode);  // Changed to signed 32-bit
+            int32_t imm = extractImmediate(instruction, opcode);
+            
+            // Read register values here for hazard detection and branch computation
+            int32_t rs1Value = registers.read(rs1);
+            int32_t rs2Value = registers.read(rs2);
             
             // More precise hazard detection based on instruction type
             bool hazard = false;
@@ -433,8 +441,21 @@ void NoForwardingProcessor::run(int cycles) {
             }
 
             if (!hazard) {
-                idex.readData1 = registers.read(rs1);
-                idex.readData2 = registers.read(rs2);
+                // Calculate branch or jump target in ID stage if applicable
+                if (opcode == 0x63 || opcode == 0x67 || opcode == 0x6F) {
+                    branchTaken = handleBranchAndJump(opcode, instruction, rs1Value, 
+                                                     imm, ifid.pc, rs2Value, branchTarget);
+                }
+                
+                // For JAL and JALR, store PC+4 in register rd
+                if ((opcode == 0x67 || opcode == 0x6F) && rd != 0) {
+                    // Set up the return address to be written to rd in later stages
+                    idex.aluResult = ifid.pc + 4;
+                    std::cout << "         Setting return address (PC+4): " << idex.aluResult << " for register x" << rd << std::endl;
+                }
+                
+                idex.readData1 = rs1Value;
+                idex.readData2 = rs2Value;
                 idex.pc = ifid.pc;
                 idex.imm = imm;
                 idex.rs1 = rs1;
@@ -445,7 +466,7 @@ void NoForwardingProcessor::run(int cycles) {
                 idex.instructionString = ifid.instructionString;
                 idex.isEmpty = false;
                 idex.isStalled = false;
-                if (idex.controls.regWrite && rd != 0) {
+                if (idex.controls.regWrite && rd != 0) {                          
                     addRegisterUsage(rd);
                     std::cout << "         Marking register x" << rd << " as busy "<< " size: "<< regUsageTracker[rd].size() << std::endl;
                 }
@@ -495,10 +516,8 @@ void NoForwardingProcessor::run(int cycles) {
         // -------------------- End-of-Cycle Processing --------------------
         if (branchTaken) {
             pc = branchTarget;
-            // Make registers in use available for writing of ID stage ones.
-            clearRegisterUsage(idex.rd);
+            // If we have a branch/jump in ID, we only need to flush IF stage
             ifid.isEmpty = true;
-            idex.isEmpty = true;
             std::cout << "         Flushing pipeline due to branch/jump" << std::endl;
         }
         if (stall) {
@@ -512,12 +531,32 @@ void NoForwardingProcessor::run(int cycles) {
 
 // ---------------------- Print Pipeline Diagram ----------------------
 
-void NoForwardingProcessor::printPipelineDiagram() {
-    std::ofstream outFile("output.csv");
+void NoForwardingProcessor::printPipelineDiagram(std::string& filename) {
+    // Create outputfiles directory if it doesn't exist - one level above srcs directory
+    std::string outputDir = "../outputfiles";
+    
+    #ifdef _WIN32
+    // Windows-specific directory creation
+    system(("mkdir " + outputDir + " 2>nul").c_str());
+    #else
+    // Linux/Unix directory creation
+    system(("mkdir -p " + outputDir).c_str());
+    #endif
+    
+    // Get base filename without directory path
+    std::string baseFilename = filename.substr(filename.find_last_of("/\\") + 1);
+    baseFilename = baseFilename.substr(0, baseFilename.find_last_not_of('.'));
+    
+    // Output file name will be in outputfiles folder with _no_forward_out.csv appended
+    std::string outputFilename = outputDir + "/" + baseFilename + "_no_forward_out.csv";
+    std::ofstream outFile(outputFilename);
+    
     if (!outFile.is_open()) {
-        std::cerr << "Error: Unable to open output.csv for writing" << std::endl;
+        std::cerr << "Error: Unable to open " << outputFilename << " for writing" << std::endl;
         return;
     }
+    
+    std::cout << "Writing pipeline diagram to " << outputFilename << std::endl;
     
     // Find the longest instruction string to determine column width
     size_t maxInstrLength = 0;
@@ -602,14 +641,14 @@ bool NoForwardingProcessor::evaluateBranchCondition(int32_t rs1Value, int32_t rs
     }
 }
 
-// New function to handle all branch and jump instructions
-bool NoForwardingProcessor::handleBranchAndJump(uint32_t opcode, uint32_t instruction, int32_t readData1, 
-                                              int32_t imm, int32_t pc, int32_t readData2, int32_t& branchTarget) {
+// Updated to work in ID stage now
+bool NoForwardingProcessor::handleBranchAndJump(uint32_t opcode, uint32_t instruction, int32_t rs1Value, 
+                                              int32_t imm, int32_t pc, int32_t rs2Value, int32_t& branchTarget) {
     bool branchTaken = false;
     
     if (opcode == 0x63) {  // Branch
         uint32_t funct3 = (instruction >> 12) & 0x7;
-        bool condition = evaluateBranchCondition(readData1, readData2, funct3);
+        bool condition = evaluateBranchCondition(rs1Value, rs2Value, funct3);
         
         if (condition) {
             branchTaken = true;
@@ -627,8 +666,8 @@ bool NoForwardingProcessor::handleBranchAndJump(uint32_t opcode, uint32_t instru
     }
     else if (opcode == 0x67) {  // JALR
         branchTaken = true;
-        branchTarget = (readData1 + imm) & ~1; // Clear least significant bit per spec
-        std::cout <<"-> Return register data "<< readData1 <<"         JALR: Jump to PC: " << branchTarget << std::endl;
+        branchTarget = (rs1Value + imm) & ~1; // Clear least significant bit per spec
+        std::cout << "-> Return register data " << rs1Value << "         JALR: Jump to PC: " << branchTarget << std::endl;
     }
     
     return branchTaken;

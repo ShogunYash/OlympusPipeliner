@@ -39,9 +39,10 @@ struct IDEXRegister {
     std::string instructionString;
     bool isStalled;
     bool isEmpty;
+    int32_t aluResult;  // Added to support early calculation of return addresses
 
     IDEXRegister() : pc(0), instruction(0), readData1(0), readData2(0), imm(0), rs1(0), rs2(0), rd(0),
-                     isStalled(false), isEmpty(true) {}
+                     isStalled(false), isEmpty(true), aluResult(0) {}
 };
 
 // EX/MEM Pipeline Register

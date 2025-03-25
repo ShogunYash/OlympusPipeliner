@@ -67,8 +67,10 @@ private:
     
     // Branch and jump related functions
     bool evaluateBranchCondition(int32_t rs1Value, int32_t rs2Value, uint32_t funct3);
-    bool handleBranchAndJump(uint32_t opcode, uint32_t instruction, int32_t readData1, 
-                            int32_t imm, int32_t pc, int32_t readData2, int32_t& branchTarget);
+    
+    // Updated to work in ID stage, using register values directly
+    bool handleBranchAndJump(uint32_t opcode, uint32_t instruction, int32_t rs1Value, 
+                            int32_t imm, int32_t pc, int32_t rs2Value, int32_t& branchTarget);
     
     // Helper to record a stage in the pipeline matrix.
     // 'instrIndex' is the row index (the instruction’s program order index)
@@ -92,6 +94,6 @@ public:
     ~NoForwardingProcessor();  // Destructor to free memory
     bool loadInstructions(const std::string& filename);
     void run(int cycles);
-    void printPipelineDiagram(); // Print pipeline diagram to file
+    void printPipelineDiagram(std::string& InputFile); // Print pipeline diagram to file
     size_t getInstructionCount() const { return instructionStrings.size(); }
 };
