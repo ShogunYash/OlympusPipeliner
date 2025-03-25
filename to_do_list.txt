@@ -1,5 +1,4 @@
 make the instruction index access through the index value of the pipeline.
-In print pipeline check if zero cycles
 lb byte working 
 for int_min_max their in ripes after one run not matching
 make output.txt in output folder with input file name abbrevation then output

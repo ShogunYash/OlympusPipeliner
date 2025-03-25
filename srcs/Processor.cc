@@ -151,7 +151,6 @@ int32_t NoForwardingProcessor::executeALU(int32_t a, int32_t b, uint32_t aluOp) 
 void NoForwardingProcessor::recordStage(int instrIndex, int cycle, PipelineStage stage) {
     if (instrIndex < 0 || instrIndex >= matrixRows || cycle < 0 || cycle >= matrixCols)
         return;
-    pipelineMatrix[instrIndex][cycle] = stage;
     // Check if there's only one element and it's SPACE
     if ( pipelineMatrix3D[instrIndex][cycle][0] == SPACE ) {
         // Replace the SPACE with the actual stage
@@ -171,16 +170,6 @@ int NoForwardingProcessor::getInstructionIndex(int32_t index) const {
     return static_cast<int>(index / 4);
 }
 
-// Free the dynamically allocated pipeline matrix.
-void NoForwardingProcessor::freePipelineMatrix() {
-    if (pipelineMatrix) {
-        for (int i = 0; i < matrixRows; i++) {
-            free(pipelineMatrix[i]);
-        }
-        free(pipelineMatrix);
-        pipelineMatrix = nullptr;
-    }
-}
 
 // ---------------------- Register Usage Tracker Functions ----------------------
 
@@ -214,7 +203,6 @@ void NoForwardingProcessor::clearRegisterUsage(uint32_t regNum) {
 
 NoForwardingProcessor::NoForwardingProcessor() : 
     pc(0), 
-    pipelineMatrix(nullptr),  // Initialize pipelineMatrix first
     stall(false),              // Now initialize stall
 // Initialize register usage tracker with 32 empty vectors
     regUsageTracker(32)
@@ -223,7 +211,6 @@ NoForwardingProcessor::NoForwardingProcessor() :
 }
 
 NoForwardingProcessor::~NoForwardingProcessor() {
-    freePipelineMatrix();
 }
 
 // ---------------------- Instruction Loading ---------------------- 
@@ -279,11 +266,6 @@ void NoForwardingProcessor::run(int cycles) {
     // Allocate the pipeline matrix.
     matrixRows = static_cast<int>(instructionStrings.size());
     matrixCols = cycles;
-    pipelineMatrix = (PipelineStage**)malloc(matrixRows * sizeof(PipelineStage*));
-    for (int i = 0; i < matrixRows; i++) {
-        pipelineMatrix[i] = (PipelineStage*)malloc(matrixCols * sizeof(PipelineStage));
-        memset(pipelineMatrix[i], SPACE, matrixCols * sizeof(PipelineStage)); // initialize all cells to STALL marker
-    }
 
     // Resize the outer vector to have matrixRows elements
     pipelineMatrix3D.resize(matrixRows);
@@ -327,12 +309,48 @@ void NoForwardingProcessor::run(int cycles) {
             if (idx != -1)
                 recordStage(idx, cycle, MEM);
             if (exmem.controls.memRead) {
-                memwb.readData = dataMemory.readWord(exmem.aluResult);
+                // Determine the type of load based on the funct3 field
+                uint32_t funct3 = (exmem.instruction >> 12) & 0x7;
+                switch (funct3) {
+                    case 0x0: // LB - Load Byte (sign-extended)
+                        memwb.readData = static_cast<int8_t>(dataMemory.readByte(exmem.aluResult));
+                        break;
+                    case 0x1: // LH - Load Half-word (sign-extended)
+                        memwb.readData = dataMemory.readHalfWord(exmem.aluResult);
+                        break;
+                    case 0x2: // LW - Load Word
+                        memwb.readData = dataMemory.readWord(exmem.aluResult);
+                        break;
+                    case 0x4: // LBU - Load Byte (zero-extended)
+                        memwb.readData = dataMemory.readByte(exmem.aluResult);
+                        break;
+                    case 0x5: // LHU - Load Half-word (zero-extended)
+                        memwb.readData = static_cast<uint16_t>(dataMemory.readHalfWord(exmem.aluResult) & 0xFFFF);
+                        break;
+                    default: // Default to word for unknown types
+                        memwb.readData = dataMemory.readWord(exmem.aluResult);
+                        break;
+                }
                 std::cout << "         Read from memory at address " << exmem.aluResult << " data: " << memwb.readData << std::endl;
             }
             if (exmem.controls.memWrite) {
-                dataMemory.writeWord(exmem.aluResult, exmem.readData2);
-                std::cout << "         Wrote " << exmem.readData2 << " to memory at address " << exmem.aluResult << std::endl;
+                // Determine the type of store based on the funct3 field
+                uint32_t funct3 = (exmem.instruction >> 12) & 0x7;
+                switch (funct3) {
+                    case 0x0: // SB - Store Byte
+                        dataMemory.writeByte(exmem.aluResult, exmem.readData2 & 0xFF);
+                        break;
+                    case 0x1: // SH - Store Half-word
+                        dataMemory.writeHalfWord(exmem.aluResult, exmem.readData2 & 0xFFFF);
+                        break;
+                    case 0x2: // SW - Store Word
+                        dataMemory.writeWord(exmem.aluResult, exmem.readData2);
+                        break;
+                    default: // Default to word for unknown types
+                        dataMemory.writeWord(exmem.aluResult, exmem.readData2);
+                        break;
+                }
+                std::cout << "         Wrote " << exmem.readData2 << " to memory at address " << exmem.aluResult << "---> Funt3: "<< funct3 << std::endl;
             }
             memwb.pc = exmem.pc;
             memwb.aluResult = exmem.aluResult;

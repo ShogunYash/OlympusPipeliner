@@ -48,9 +48,7 @@ private:
     EXMEMRegister exmem;
     MEMWBRegister memwb;
     
-    // Instead of a history map, we use a matrix allocated with malloc.
     // Rows correspond to instructions (in program order) and columns to cycle numbers.
-    PipelineStage** pipelineMatrix; // 2D array of PipelineStage
     // Implement new type of pipeline matrix with 3D array to store stages of same instruction in same cycle with vector of stages
     std::vector<std::vector<std::vector<PipelineStage>>> pipelineMatrix3D;
     int matrixRows;   // equal to number of instructions loaded
@@ -77,9 +75,6 @@ private:
     
     // Helper: returns the index of the given pc in that stage
     int getInstructionIndex(int32_t index) const;
-    
-    // Free the pipeline matrix.
-    void freePipelineMatrix();
     
     // New helper function to check if a register is used by a specific instruction
     bool isRegisterUsedBy(uint32_t regNum) const;
