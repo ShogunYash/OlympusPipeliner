@@ -12,6 +12,7 @@
 enum PipelineStage {
     SPACE=0,  // Empty cell in the pipeline diagram
     STALL,
+    SLASH, 
     IF,
     ID,
     EX,
@@ -27,6 +28,7 @@ inline const char* stageToString(PipelineStage stage) {
         case EX:   return "EX";
         case MEM:  return "ME";
         case WB:   return "WB";
+        case SLASH: return "/";
         case STALL: return "- ";
         default:   return "  ";
     }
@@ -48,7 +50,9 @@ private:
     
     // Instead of a history map, we use a matrix allocated with malloc.
     // Rows correspond to instructions (in program order) and columns to cycle numbers.
-    PipelineStage** pipelineMatrix; 
+    PipelineStage** pipelineMatrix; // 2D array of PipelineStage
+    // Implement new type of pipeline matrix with 3D array to store stages of same instruction in same cycle with vector of stages
+    std::vector<std::vector<std::vector<PipelineStage>>> pipelineMatrix3D;
     int matrixRows;   // equal to number of instructions loaded
     int matrixCols;   // equal to the number of cycles (set when run() is called)
     

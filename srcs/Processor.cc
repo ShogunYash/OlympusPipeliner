@@ -50,6 +50,8 @@ int32_t NoForwardingProcessor::extractImmediate(uint32_t instruction, uint32_t o
 ControlSignals NoForwardingProcessor::decodeControlSignals(uint32_t instruction) {
     ControlSignals signals;
     uint32_t opcode = instruction & 0x7F;
+    uint32_t funct7 = (instruction >> 25) & 0x7F;
+    uint32_t funct3 = (instruction >> 12) & 0x7;
     
     // Default signals.
     signals.regWrite = false;
@@ -64,8 +66,15 @@ ControlSignals NoForwardingProcessor::decodeControlSignals(uint32_t instruction)
     switch (opcode) {
         case 0x33:  // R-type
             signals.regWrite = true;
-            // NOTE: your original decoding of aluOp is preserved.
-            signals.aluOp = ((instruction >> 12) & 0x7) | (((instruction >> 25) & 0x7F) ? 0x8 : 0);
+            
+            if (funct7 == 0x01) {  // M extension instructions
+                // Set ALU operation based on funct3 for M-extension
+                // We'll use opcodes starting from 10 for M extension operations
+                signals.aluOp = 10 + funct3;
+            } else {
+                // Original R-type ALU op logic
+                signals.aluOp = funct3 | ((funct7) ? 0x8 : 0);
+            }
             break;
         case 0x13:  // I-type
             signals.regWrite = true;
@@ -121,6 +130,17 @@ int32_t NoForwardingProcessor::executeALU(int32_t a, int32_t b, uint32_t aluOp) 
         case 7:  return a >> (b & 0x1F);               // SRA (arithmetic shift, already signed)
         case 8:  return a | b;                         // OR
         case 9:  return a & b;                         // AND
+        
+        // M extension instructions (ALU ops 10-17)
+        case 10: return a * b;                         // MUL
+        case 11: return static_cast<int64_t>(a) * static_cast<int64_t>(b) >> 32; // MULH
+        case 12: return static_cast<int64_t>(a) * static_cast<uint64_t>(b) >> 32; // MULHSU
+        case 13: return static_cast<uint64_t>(static_cast<uint32_t>(a)) * static_cast<uint64_t>(static_cast<uint32_t>(b)) >> 32; // MULHU
+        case 14: return (b == 0) ? -1 : (a / b);      // DIV (handle division by zero)
+        case 15: return (b == 0) ? -1 : (static_cast<uint32_t>(a) / static_cast<uint32_t>(b)); // DIVU
+        case 16: return (b == 0) ? a : (a % b);       // REM (handle division by zero)
+        case 17: return (b == 0) ? a : (static_cast<uint32_t>(a) % static_cast<uint32_t>(b)); // REMU
+        
         default: return 0;
     }
 }
@@ -132,6 +152,15 @@ void NoForwardingProcessor::recordStage(int instrIndex, int cycle, PipelineStage
     if (instrIndex < 0 || instrIndex >= matrixRows || cycle < 0 || cycle >= matrixCols)
         return;
     pipelineMatrix[instrIndex][cycle] = stage;
+    // Check if there's only one element and it's SPACE
+    if ( pipelineMatrix3D[instrIndex][cycle][0] == SPACE ) {
+        // Replace the SPACE with the actual stage
+        pipelineMatrix3D[instrIndex][cycle][0] = stage;
+    } else {
+        // Append the new stage to the existing vector
+        pipelineMatrix3D[instrIndex][cycle].push_back(stage);
+    }
+    
 }
 
 // Return the index of an instruction correspondin to pc in instructionStrings.
@@ -244,6 +273,18 @@ void NoForwardingProcessor::run(int cycles) {
     for (int i = 0; i < matrixRows; i++) {
         pipelineMatrix[i] = (PipelineStage*)malloc(matrixCols * sizeof(PipelineStage));
         memset(pipelineMatrix[i], SPACE, matrixCols * sizeof(PipelineStage)); // initialize all cells to STALL marker
+    }
+
+    // Resize the outer vector to have matrixRows elements
+    pipelineMatrix3D.resize(matrixRows);
+
+    // Resize each inner vector to have matrixCols elements
+    for (int i = 0; i < matrixRows; i++) {
+        pipelineMatrix3D[i].resize(matrixCols);
+        // Initialize each cell with a vector containing a single SPACE value
+        for (int j = 0; j < matrixCols; j++) {
+            pipelineMatrix3D[i][j].push_back(SPACE);
+        }
     }
     
     // Simulation loop.
@@ -478,7 +519,7 @@ void NoForwardingProcessor::run(int cycles) {
 void NoForwardingProcessor::printPipelineDiagram() {
     std::ofstream outFile("output.csv");
     if (!outFile.is_open()) {
-        std::cerr << "Error: Unable to open output.txt for writing" << std::endl;
+        std::cerr << "Error: Unable to open output.csv for writing" << std::endl;
         return;
     }
     
@@ -494,12 +535,88 @@ void NoForwardingProcessor::printPipelineDiagram() {
     // Set a minimum width for the instruction column (at least 20 characters)
     const size_t instrColumnWidth = std::max(maxInstrLength, static_cast<size_t>(20));
     
+// // Print header with fixed width
+    // outFile << std::left << std::setw(instrColumnWidth) << "Instruction";
+    // for (int i = 0; i < matrixCols; i++) {
+    //     outFile << "," << i;
+    // }
+    // outFile << "," << std::endl;
+    
+    // // For each instruction (row), print the stage per cycle with fixed width
+    // for (int i = 0; i < matrixRows; i++) {  
+    //     std::string instr = instructionStrings[i];
+    //     // Clean the instruction text
+    //     instr.erase(std::remove(instr.begin(), instr.end(), '\n'), instr.end());
+    //     instr.erase(std::remove(instr.begin(), instr.end(), '\r'), instr.end());
+        
+    //     // Print the instruction with fixed width
+    //     outFile << std::left << std::setw(instrColumnWidth) << instr;
+    //     if (pipelineMatrix3D[i].empty()) {
+
+    //         outFile << "," << stageToString(pipelineMatrix[i][0]);
+    //     // Store prev stage to check for stall
+    //     PipelineStage prevStage = pipelineMatrix[i][0];
+        
+    //     // Print each cycle's stage
+    //     for (int j = 1; j < matrixCols; j++) {
+    //         if (prevStage == pipelineMatrix[i][j] && pipelineMatrix[i][j]!= SPACE) {
+    //             outFile << "," << stageToString(STALL);
+    //         }
+    //         else {
+    //             outFile << "," << stageToString(pipelineMatrix[i][j]);
+    //             prevStage = pipelineMatrix[i][j];
+    //         }
+    //     }
+    //     // for (int j = 0; j < matrixCols; j++) {            
+    //     //     outFile << "," << stageToString(pipelineMatrix[i][j]);
+    //     // }
+    //     outFile << "," << std::endl;
+    // }
+
+    // // Print header with fixed width
+    // outFile << std::left << std::setw(instrColumnWidth) << "Instruction";
+    // for (int i = 0; i < matrixCols; i++) {
+    //     outFile << "," << i;
+    // }
+    // outFile << "," << std::endl;
+    
+    // // For each instruction (row), print the stage per cycle with fixed width
+    // for (int i = 0; i < matrixRows; i++) {  
+    //     std::string instr = instructionStrings[i];
+    //     // Clean the instruction text
+    //     instr.erase(std::remove(instr.begin(), instr.end(), '\n'), instr.end());
+    //     instr.erase(std::remove(instr.begin(), instr.end(), '\r'), instr.end());
+        
+    //     // Print the instruction with fixed width
+    //     outFile << std::left << std::setw(instrColumnWidth) << instr;
+    //     if (pipelineMatrix3D[i].empty()) {
+
+    //         outFile << "," << stageToString(pipelineMatrix[i][0]);
+    //     // Store prev stage to check for stall
+    //     PipelineStage prevStage = pipelineMatrix[i][0];
+        
+    //     // Print each cycle's stage
+    //     for (int j = 1; j < matrixCols; j++) {
+    //         if (prevStage == pipelineMatrix[i][j] && pipelineMatrix[i][j]!= SPACE) {
+    //             outFile << "," << stageToString(STALL);
+    //         }
+    //         else {
+    //             outFile << "," << stageToString(pipelineMatrix[i][j]);
+    //             prevStage = pipelineMatrix[i][j];
+    //         }
+    //     }
+    //     // for (int j = 0; j < matrixCols; j++) {            
+    //     //     outFile << "," << stageToString(pipelineMatrix[i][j]);
+    //     // }
+    //     outFile << "," << std::endl;
+    // }
+
     // Print header with fixed width
     outFile << std::left << std::setw(instrColumnWidth) << "Instruction";
     for (int i = 0; i < matrixCols; i++) {
         outFile << "," << i;
     }
-    outFile << "," << std::endl;
+    outFile << std::endl;
     
     // For each instruction (row), print the stage per cycle with fixed width
     for (int i = 0; i < matrixRows; i++) {  
@@ -510,24 +627,47 @@ void NoForwardingProcessor::printPipelineDiagram() {
         
         // Print the instruction with fixed width
         outFile << std::left << std::setw(instrColumnWidth) << instr;
-        outFile << "," << stageToString(pipelineMatrix[i][0]);
+// outFile << "," << stageToString(pipelineMatrix3D[i][0][0]);
         // Store prev stage to check for stall
-        PipelineStage prevStage = pipelineMatrix[i][0];
+        // PipelineStage prevStage = pipelineMatrix3D[i][0][0];
+// outFile << "," << stageToString(pipelineMatrix3D[i][0][0]);
+        // Store prev stage to check for stall
+        // PipelineStage prevStage = pipelineMatrix3D[i][0][0];
         
+        PipelineStage prevStage = SPACE;
         // Print each cycle's stage
-        for (int j = 1; j < matrixCols; j++) {
-            if (prevStage == pipelineMatrix[i][j] && pipelineMatrix[i][j]!= SPACE) {
-                outFile << "," << stageToString(STALL);
+        for (int j = 0; j < matrixCols; j++) {
+            // Get all stages for this instruction in this cycle
+            const std::vector<PipelineStage>& stages = pipelineMatrix3D[i][j];
+            // Start with a comma for CSV format
+            outFile << ",";
+            
+            // If there are no stages or only SPACE, print empty cell
+            if (stages.size() == 1 && stages[0] == SPACE) {
+                outFile << "  "; // Print spaces for empty cell
+                prevStage = SPACE;
+                continue;
             }
-            else {
-                outFile << "," << stageToString(pipelineMatrix[i][j]);
-                prevStage = pipelineMatrix[i][j];
+            
+            // Print first stage and stall if previous stage is same as current stage
+            if (stages.size()==1){
+                if (stages[0]==prevStage && stages[0]!=SPACE)
+                    outFile << "- ";
+                else
+                    outFile << stageToString(stages[0]);
+                prevStage = stages[0];
+            }
+            else{
+                // Print stages in reverse format if there are multiple stages
+                outFile << stageToString(stages[stages.size()-1]);
+                for (int k = stages.size()-2; k >= 0; k--) {
+                    outFile<<"/"<<stageToString(stages[k]);
+                }
+                prevStage = SPACE;
             }
         }
-        // for (int j = 0; j < matrixCols; j++) {            
-        //     outFile << "," << stageToString(pipelineMatrix[i][j]);
-        // }
-        outFile << "," << std::endl;
+        
+        outFile << std::endl;
     }
     outFile.close();
 }
