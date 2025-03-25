@@ -193,11 +193,21 @@ bool NoForwardingProcessor::isRegisterUsedBy(uint32_t regNum) const {
 void NoForwardingProcessor::addRegisterUsage(uint32_t regNum) { 
     // Add the true usage flag to the register's usage list
     regUsageTracker[regNum].push_back(true);
+    if (regNum == 1){
+        std::cout << "---------------------------> Adding register usage for x1"<< " size: "<< regUsageTracker[regNum].size() << std::endl;
+    }
 }
 
 void NoForwardingProcessor::clearRegisterUsage(uint32_t regNum) {
     // Remove the instruction index from this register's usage list
-    regUsageTracker[regNum].pop_back();
+    if (regNum == 1){
+        std::cout << "----------------------------> Clearing register usage for x1"<< " size: "<< regUsageTracker[regNum].size() << std::endl;
+    }
+    if (!regUsageTracker[regNum].empty())
+        regUsageTracker[regNum].pop_back();
+    if (regNum == 1){
+        std::cout << "---------------------------> Cleared register usage for x1"<< " size: "<< regUsageTracker[regNum].size() << std::endl;
+    }
 }
 
 // ---------------------- Constructor/Destructor ----------------------
@@ -346,14 +356,18 @@ void NoForwardingProcessor::run(int cycles) {
             int32_t aluOp1 = idex.readData1;  // Changed to signed 32-bit
             int32_t aluOp2 = idex.controls.aluSrc ? idex.imm : idex.readData2;  // Changed to signed 32-bit
             uint32_t opcode = idex.instruction & 0x7F;
-            if(opcode != 0x67) // JALR
+            if  (opcode == 0x67 || opcode == 0x6F) // JALR or JAL
+                exmem.aluResult = idex.pc + 4;    // PC+4 for return address
+            else {
                 exmem.aluResult = executeALU(aluOp1, aluOp2, idex.controls.aluOp);
-            else 
-                exmem.aluResult = idex.pc + 4;    // PC+4 for JALR
+            }
+
             std::cout << "         ALU operation result: " << exmem.aluResult << std::endl;
             if (opcode == 0x63) {  // Branch
                 bool condition = false;
                 uint32_t funct3 = (idex.instruction >> 12) & 0x7;
+                std::cout << "------------------->         Branch condition: "<< funct3 << std::endl;
+                std::cout << "------------------->         Comparing " << idex.readData1 << " and " << idex.readData2 << std::endl;
                 switch (funct3) {
                     case 0x0: condition = (idex.readData1 == idex.readData2); break;
                     case 0x1: condition = (idex.readData1 != idex.readData2); break;
