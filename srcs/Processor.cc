@@ -182,32 +182,23 @@ bool NoForwardingProcessor::isRegisterUsedBy(uint32_t regNum) const {
 void NoForwardingProcessor::addRegisterUsage(uint32_t regNum) { 
     // Add the true usage flag to the register's usage list
     regUsageTracker[regNum].push_back(true);
-    if (regNum == 1){
-        std::cout << "---------------------------> Adding register usage for x1"<< " size: "<< regUsageTracker[regNum].size() << std::endl;
-    }
 }
 
 void NoForwardingProcessor::clearRegisterUsage(uint32_t regNum) {
     // Remove the instruction index from this register's usage list
-    if (regNum == 1){
-        std::cout << "----------------------------> Clearing register usage for x1"<< " size: "<< regUsageTracker[regNum].size() << std::endl;
-    }
     if (!regUsageTracker[regNum].empty())
         regUsageTracker[regNum].pop_back();
-    if (regNum == 1){
-        std::cout << "---------------------------> Cleared register usage for x1"<< " size: "<< regUsageTracker[regNum].size() << std::endl;
-    }
+
 }
 
 // ---------------------- Constructor/Destructor ----------------------
 
 NoForwardingProcessor::NoForwardingProcessor() : 
     pc(0), 
-    stall(false),              // Now initialize stall
-// Initialize register usage tracker with 32 empty vectors
-    regUsageTracker(32)
+    stall(false),
+    regUsageTracker(32)  // Initialize register usage tracker with 32 empty vectors
 {
-    std::fill(std::begin(regInUse), std::end(regInUse), false);
+    // No need to initialize regInUse array anymore
 }
 
 NoForwardingProcessor::~NoForwardingProcessor() {
@@ -381,39 +372,12 @@ void NoForwardingProcessor::run(int cycles) {
             }
 
             std::cout << "         ALU operation result: " << exmem.aluResult << std::endl;
-            if (opcode == 0x63) {  // Branch
-                bool condition = false;
-                uint32_t funct3 = (idex.instruction >> 12) & 0x7;
-                std::cout << "------------------->         Branch condition: "<< funct3 << std::endl;
-                std::cout << "------------------->         Comparing " << idex.readData1 << " and " << idex.readData2 << std::endl;
-                switch (funct3) {
-                    case 0x0: condition = (idex.readData1 == idex.readData2); break;
-                    case 0x1: condition = (idex.readData1 != idex.readData2); break;
-                    case 0x4: condition = (idex.readData1 < idex.readData2); break;  // Already signed
-                    case 0x5: condition = (idex.readData1 >= idex.readData2); break; // Already signed
-                    case 0x6: condition = (static_cast<uint32_t>(idex.readData1) < static_cast<uint32_t>(idex.readData2)); break;  // Unsigned comparison
-                    case 0x7: condition = (static_cast<uint32_t>(idex.readData1) >= static_cast<uint32_t>(idex.readData2)); break; // Unsigned comparison
-                }
-                if (condition) {
-                    branchTaken = true;
-                    branchTarget = idex.pc + idex.imm;
-                    std::cout << "         Branch taken to PC: " << branchTarget << std::endl;
-                }
-                else {
-                    std::cout << "         Branch not taken" << std::endl;
-                }
-            }
-            else if (opcode == 0x6F) {  // JAL
-                branchTaken = true;
-                branchTarget = idex.pc + idex.imm;
-                std::cout << "         JAL: Jump to PC: " << branchTarget << std::endl;
-            }
-            else if (opcode == 0x67) {  // JALR
-                branchTaken = true;
-                branchTarget = (idex.readData1 + idex.imm) & ~1;
-                std::cout <<"-> Return register data "<<idex.readData1 <<"         JALR: Jump to PC: " << branchTarget << std::endl;
-            }
-            else if (opcode == 0x17){ // AUIPC
+            
+            // Use the new function to handle branch and jump instructions
+            branchTaken = handleBranchAndJump(opcode, idex.instruction, idex.readData1, 
+                                             idex.imm, idex.pc, idex.readData2, branchTarget);
+                                             
+            if (opcode == 0x17){ // AUIPC
                 exmem.aluResult = idex.pc + idex.imm;
                 std::cout << "         AUIPC: Jump to PC: " << exmem.aluResult << std::endl;
             }
@@ -620,4 +584,52 @@ void NoForwardingProcessor::printPipelineDiagram() {
         outFile << std::endl;
     }
     outFile.close();
+}
+
+// New function to evaluate branch conditions
+bool NoForwardingProcessor::evaluateBranchCondition(int32_t rs1Value, int32_t rs2Value, uint32_t funct3) {
+    std::cout << "------------------->         Branch condition: " << funct3 << std::endl;
+    std::cout << "------------------->         Comparing " << rs1Value << " and " << rs2Value << std::endl;
+    
+    switch (funct3) {
+        case 0x0: return rs1Value == rs2Value;                                          // BEQ
+        case 0x1: return rs1Value != rs2Value;                                          // BNE
+        case 0x4: return rs1Value < rs2Value;                                           // BLT (signed)
+        case 0x5: return rs1Value >= rs2Value;                                          // BGE (signed)
+        case 0x6: return static_cast<uint32_t>(rs1Value) < static_cast<uint32_t>(rs2Value);   // BLTU (unsigned)
+        case 0x7: return static_cast<uint32_t>(rs1Value) >= static_cast<uint32_t>(rs2Value);  // BGEU (unsigned)
+        default:  return false;
+    }
+}
+
+// New function to handle all branch and jump instructions
+bool NoForwardingProcessor::handleBranchAndJump(uint32_t opcode, uint32_t instruction, int32_t readData1, 
+                                              int32_t imm, int32_t pc, int32_t readData2, int32_t& branchTarget) {
+    bool branchTaken = false;
+    
+    if (opcode == 0x63) {  // Branch
+        uint32_t funct3 = (instruction >> 12) & 0x7;
+        bool condition = evaluateBranchCondition(readData1, readData2, funct3);
+        
+        if (condition) {
+            branchTaken = true;
+            branchTarget = pc + imm;
+            std::cout << "         Branch taken to PC: " << branchTarget << std::endl;
+        }
+        else {
+            std::cout << "         Branch not taken" << std::endl;
+        }
+    }
+    else if (opcode == 0x6F) {  // JAL
+        branchTaken = true;
+        branchTarget = pc + imm;
+        std::cout << "         JAL: Jump to PC: " << branchTarget << std::endl;
+    }
+    else if (opcode == 0x67) {  // JALR
+        branchTaken = true;
+        branchTarget = (readData1 + imm) & ~1; // Clear least significant bit per spec
+        std::cout <<"-> Return register data "<< readData1 <<"         JALR: Jump to PC: " << branchTarget << std::endl;
+    }
+    
+    return branchTaken;
 }

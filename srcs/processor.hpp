@@ -56,9 +56,6 @@ private:
     
     bool stall;
     
-    // Register In-Use Array: true means the register is pending a write-back.
-    bool regInUse[32];
-    
     // Advanced register usage tracking: vector of vectors to track which instruction uses each register
     // First dimension is register number (0-31), second dimension is variable-length list of instruction IDs
     std::vector<std::vector<bool>> regUsageTracker;
@@ -67,6 +64,11 @@ private:
     ControlSignals decodeControlSignals(uint32_t instruction);
     int32_t executeALU(int32_t a, int32_t b, uint32_t aluOp);  // Changed to signed 32-bit
     int32_t extractImmediate(uint32_t instruction, uint32_t opcode);  // Changed to signed 32-bit
+    
+    // Branch and jump related functions
+    bool evaluateBranchCondition(int32_t rs1Value, int32_t rs2Value, uint32_t funct3);
+    bool handleBranchAndJump(uint32_t opcode, uint32_t instruction, int32_t readData1, 
+                            int32_t imm, int32_t pc, int32_t readData2, int32_t& branchTarget);
     
     // Helper to record a stage in the pipeline matrix.
     // 'instrIndex' is the row index (the instruction’s program order index)
