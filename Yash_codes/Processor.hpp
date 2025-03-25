@@ -32,7 +32,7 @@ inline const char* stageToString(PipelineStage stage) {
 }
 
 class NoForwardingProcessor {
-private:
+public:
     int32_t pc;  // Changed to signed 32-bit
     RegisterFile registers;
     Memory dataMemory;
@@ -72,11 +72,11 @@ private:
     // Free the pipeline matrix.
     void freePipelineMatrix();
 
-public:
+
     NoForwardingProcessor();
     ~NoForwardingProcessor();  // Destructor to free memory
     bool loadInstructions(const std::string& filename);
-    void run(int cycles);
+    virtual void run(int cycles);
     void printPipelineDiagram(); // Print pipeline diagram to file
     size_t getInstructionCount() const { return instructionStrings.size(); }
 };
