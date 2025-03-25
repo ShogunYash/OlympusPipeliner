@@ -26,7 +26,7 @@ ForwardingProcessor::ForwardingUnit ForwardingProcessor::checkForwarding() {
         // Forward A if rs1 matches rd in EX/MEM
         if (idex.rs1 == exmem.rd) {
             unit.forwardA = true;
-            unit.forwardASource = MEM_WB_FORWARD; // From EX/MEM
+            unit.forwardASource = EX_MEM_FORWARD; // From EX/MEM
             std::cout << "         Forwarding from EX/MEM to rs1 (x" << idex.rs1 << ")" << std::endl;
         }
         
