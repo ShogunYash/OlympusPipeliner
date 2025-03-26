@@ -8,58 +8,108 @@
 #include <cassert>
 #include <string.h>
 
-ForwardingProcessor::ForwardingProcessor() : NoForwardingProcessor() {
-    // Initialize any forwarding-specific variables
+ForwardingProcessor::ForwardingProcessor() : NoForwardingProcessor() {}
+
+ForwardingProcessor::~ForwardingProcessor() {}
+
+ForwardingProcessor::ForwardA ForwardingProcessor::determineForwardA() {
+    // Forward from EX/MEM stage first priority
+    if (exmem.controls.regWrite && 
+        exmem.rd != 0 && 
+        idex.rs1 == exmem.rd) {
+        return FA_EX_MEM;
+    }
+    
+    // Forward from MEM/WB stage second priority
+    if (memwb.controls.regWrite && 
+        memwb.rd != 0 && 
+        idex.rs1 == memwb.rd) {
+        return FA_MEM_WB;
+    }
+    
+    return FA_NO_FORWARD;
 }
 
-// Check for data hazards that can be resolved with forwarding
-ForwardingProcessor::ForwardingUnit ForwardingProcessor::checkForwarding() {
-    ForwardingUnit unit = {false, false};
-    
-    // No forwarding needed if ID/EX is empty
-    if (idex.isEmpty) {
-        return unit;
+ForwardingProcessor::ForwardB ForwardingProcessor::determineForwardB() {
+    // Forward from EX/MEM stage first priority
+    if (exmem.controls.regWrite && 
+        exmem.rd != 0 && 
+        idex.rs2 == exmem.rd) {
+        return FB_EX_MEM;
     }
     
-    // ---- Check for EX/MEM forwarding ----
-    if (!exmem.isEmpty && exmem.controls.regWrite && exmem.rd != 0) {
-        // Forward A if rs1 matches rd in EX/MEM
-        if (idex.rs1 == exmem.rd) {
-            unit.forwardA = true;
-            unit.forwardASource = EX_MEM_FORWARD; // From EX/MEM
-            std::cout << "         Forwarding from EX/MEM to rs1 (x" << idex.rs1 << ")" << std::endl;
-        }
-        
-        // Forward B if rs2 matches rd in EX/MEM
-        if (idex.rs2 == exmem.rd) {
-            unit.forwardB = true;
-            unit.forwardBSource =  EX_MEM_FORWARD; // From EX/MEM
-            std::cout << "         Forwarding from EX/MEM to rs2 (x" << idex.rs2 << ")" << std::endl;
-        }
+    // Forward from MEM/WB stage second priority
+    if (memwb.controls.regWrite && 
+        memwb.rd != 0 && 
+        idex.rs2 == memwb.rd) {
+        return FB_MEM_WB;
     }
     
-    // ---- Check for MEM/WB forwarding ----
-    if (!memwb.isEmpty && memwb.controls.regWrite && memwb.rd != 0) {
-        // Forward A if rs1 matches rd in MEM/WB and not already forwarded from EX/MEM
-        if (idex.rs1 == memwb.rd && !(unit.forwardA && unit.forwardASource == 1)) {
-            unit.forwardA = true;
-            unit.forwardASource = MEM_WB_FORWARD; // From MEM/WB
-            std::cout << "         Forwarding from MEM/WB to rs1 (x" << idex.rs1 << ")" << std::endl;
-        }
-        
-        // Forward B if rs2 matches rd in MEM/WB and not already forwarded from EX/MEM
-        if (idex.rs2 == memwb.rd && !(unit.forwardB && unit.forwardBSource == 1)) {
-            unit.forwardB = true;
-            unit.forwardBSource = MEM_WB_FORWARD; // From MEM/WB
-            std::cout << "         Forwarding from MEM/WB to rs2 (x" << idex.rs2 << ")" << std::endl;
-        }
+    return FB_NO_FORWARD;
+}
+
+int32_t ForwardingProcessor::selectForwardedOperand(ForwardA forwardA, int32_t readData1) {
+    switch (forwardA) {
+        case FA_EX_MEM: return exmem.aluResult;
+        case FA_MEM_WB:  
+            // If coming from memory read, use read data; otherwise use ALU result
+            return memwb.controls.memToReg ? memwb.readData : memwb.aluResult;
+        default: return readData1;
+    }
+}
+
+int32_t ForwardingProcessor::selectForwardedOperand(ForwardB forwardB, int32_t readData2) {
+    switch (forwardB) {
+        case FB_EX_MEM: return exmem.aluResult;
+        case FB_MEM_WB:  
+            // If coming from memory read, use read data; otherwise use ALU result
+            return memwb.controls.memToReg ? memwb.readData : memwb.aluResult;
+        default: return readData2;
+    }
+}
+
+bool ForwardingProcessor::detectHazard(uint32_t opcode, uint32_t rs1, uint32_t rs2) {
+    // Determine forwarding options
+    ForwardA forwardA = determineForwardA();
+    ForwardB forwardB = determineForwardB();
+
+    // If forwarding cannot resolve the hazard, then stall
+    // This is typically for RAW hazards where forwarding is not possible
+    
+    // Instructions with no source register dependencies
+    if (opcode == 0x6F || // JAL
+        opcode == 0x37 || // LUI
+        opcode == 0x17) { // AUIPC
+        return false;
     }
     
-    return unit;
+    // Load-Use Hazard: Special case where forwarding cannot help
+    if (idex.controls.memRead && 
+        ((idex.rd == rs1 && rs1 != 0) || 
+         (idex.rd == rs2 && rs2 != 0))) {
+        return true;
+    }
+    
+    // Instructions with only rs1 dependency
+    if (opcode == 0x67 || // JALR
+        opcode == 0x03 || // LOAD
+        opcode == 0x13) { // I-type ALU
+        return forwardA == FA_NO_FORWARD && rs1 != 0 && isRegisterUsedBy(rs1);
+    }
+    
+    // Instructions with both rs1 and rs2 dependencies
+    if (opcode == 0x33 || // R-type ALU
+        opcode == 0x23 || // STORE
+        opcode == 0x63) { // BRANCH
+        return ((forwardA == FA_NO_FORWARD && rs1 != 0 && isRegisterUsedBy(rs1)) ||
+                (forwardB == FB_NO_FORWARD && rs2 != 0 && isRegisterUsedBy(rs2)));
+    }
+    
+    return false;
 }
 
 void ForwardingProcessor::run(int cycles) {
-    // Reset pipeline state
+    // Reset pipeline state similar to NoForwardingProcessor
     pc = 0;
     stall = false;
     ifid.isEmpty = true;
@@ -70,15 +120,10 @@ void ForwardingProcessor::run(int cycles) {
     exmem.isStalled = false;
     memwb.isEmpty = true;
     
-    // Clear register usage tracker - using the new register tracking methods
-    for (auto& regTracker : regUsageTracker) {
-        regTracker.clear();
-    }
-    
-    // Initialize the pipeline matrix using the 3D vector approach
+    // Allocate the pipeline matrix.
     matrixRows = static_cast<int>(instructionStrings.size());
     matrixCols = cycles;
-    
+
     // Resize the outer vector to have matrixRows elements
     pipelineMatrix3D.resize(matrixRows);
 
@@ -91,13 +136,16 @@ void ForwardingProcessor::run(int cycles) {
         }
     }
     
-    // Simulation loop
+    // Simulation loop.
     for (int cycle = 0; cycle < cycles; cycle++) {
         std::cout << "========== Starting Cycle " << cycle << " ==========" << std::endl;
         bool branchTaken = false;
         int32_t branchTarget = 0;
         
+        // Similar flow to NoForwardingProcessor, but with forwarding in EX stage
+
         // -------------------- WB Stage --------------------
+        // (Same as NoForwardingProcessor)
         if (!memwb.isEmpty) {
             std::cout << "Cycle " << cycle << " - WB: Processing " << memwb.instructionString << " at PC: " << memwb.pc << std::endl;
             int idx = getInstructionIndex(memwb.pc);
@@ -106,7 +154,7 @@ void ForwardingProcessor::run(int cycles) {
             if (memwb.controls.regWrite && memwb.rd != 0) {
                 int32_t writeData = memwb.controls.memToReg ? memwb.readData : memwb.aluResult;
                 registers.write(memwb.rd, writeData);
-                clearRegisterUsage(memwb.rd); // Use the new method to clear register usage
+                clearRegisterUsage(memwb.rd);
                 std::cout << "         Written " << writeData << " to register x" << memwb.rd << std::endl;
             }
         }
@@ -115,13 +163,14 @@ void ForwardingProcessor::run(int cycles) {
         }
         
         // -------------------- MEM Stage --------------------
+        // (Same as NoForwardingProcessor)
         if (!exmem.isEmpty) {
             std::cout << "Cycle " << cycle << " - MEM: Processing " << exmem.instructionString << " at PC: " << exmem.pc << std::endl;
             int idx = getInstructionIndex(exmem.pc);
             if (idx != -1)
                 recordStage(idx, cycle, MEM);
             if (exmem.controls.memRead) {
-                // Use the memory access methods that handle different load types
+                // Determine the type of load based on the funct3 field
                 uint32_t funct3 = (exmem.instruction >> 12) & 0x7;
                 switch (funct3) {
                     case 0x0: // LB - Load Byte (sign-extended)
@@ -146,7 +195,7 @@ void ForwardingProcessor::run(int cycles) {
                 std::cout << "         Read from memory at address " << exmem.aluResult << " data: " << memwb.readData << std::endl;
             }
             if (exmem.controls.memWrite) {
-                // Use the memory access methods that handle different store types
+                // Determine the type of store based on the funct3 field
                 uint32_t funct3 = (exmem.instruction >> 12) & 0x7;
                 switch (funct3) {
                     case 0x0: // SB - Store Byte
@@ -162,7 +211,7 @@ void ForwardingProcessor::run(int cycles) {
                         dataMemory.writeWord(exmem.aluResult, exmem.readData2);
                         break;
                 }
-                std::cout << "         Wrote " << exmem.readData2 << " to memory at address " << exmem.aluResult << " ---> Funct3: " << funct3 << std::endl;
+                std::cout << "         Wrote " << exmem.readData2 << " to memory at address " << exmem.aluResult << "---> Funt3: "<< funct3 << std::endl;
             }
             memwb.pc = exmem.pc;
             memwb.aluResult = exmem.aluResult;
@@ -184,32 +233,21 @@ void ForwardingProcessor::run(int cycles) {
             if (idx != -1)
                 recordStage(idx, cycle, EX);
             
-            // Get forwarding control signals
-            ForwardingUnit forwardingUnit = checkForwarding();
+            // Determine forwarding
+            ForwardA forwardA = determineForwardA();
+            ForwardB forwardB = determineForwardB();
             
-            // Get ALU operands with forwarding consideration
-            int32_t aluOp1 = idex.readData1;  // Default to register value
-            int32_t aluOp2 = idex.controls.aluSrc ? idex.imm : idex.readData2;  // Default based on aluSrc
-            
-            // Apply forwarding for ALU operand 1 if needed
-            if (forwardingUnit.forwardA) {
-                if (forwardingUnit.forwardASource == EX_MEM_FORWARD) {  // From EX/MEM
-                    aluOp1 = exmem.aluResult;
-                } else if (forwardingUnit.forwardASource == MEM_WB_FORWARD) {  // From MEM/WB
-                    aluOp1 = memwb.controls.memToReg ? memwb.readData : memwb.aluResult;
-                }
-            }
-            
-            // Apply forwarding for ALU operand 2 if needed and not using immediate
-            if (forwardingUnit.forwardB && !idex.controls.aluSrc) {
-                if (forwardingUnit.forwardBSource == EX_MEM_FORWARD) {  // From EX/MEM
-                    aluOp2 = exmem.aluResult;
-                } else if (forwardingUnit.forwardBSource == MEM_WB_FORWARD) {  // From MEM/WB
-                    aluOp2 = memwb.controls.memToReg ? memwb.readData : memwb.aluResult;
-                }
-            }
+            // Select operands with forwarding
+            int32_t aluOp1 = selectForwardedOperand(forwardA, idex.readData1);
+            int32_t aluOp2 = idex.controls.aluSrc ? 
+                idex.imm : 
+                selectForwardedOperand(forwardB, idex.readData2);
             
             uint32_t opcode = idex.instruction & 0x7F;
+            
+            // Similar ALU operation and branch/jump handling as NoForwardingProcessor
+         
+            
             
             // For AUIPC, override the ALU result
             if (opcode == 0x17) { // AUIPC
@@ -218,53 +256,17 @@ void ForwardingProcessor::run(int cycles) {
             }
             // For JALR and JAL, override the ALU result
             else if (opcode == 0x67 || opcode == 0x6F) {
-                exmem.aluResult = idex.aluResult; // Return address (PC+4) calculated in ID stage
+                exmem.aluResult = idex.aluResult;
                 std::cout << "         Setting return address (PC+4): " << exmem.aluResult << std::endl;
             }
-            // Only handle ALU operations here
+            // Only handle ALU operations here, branch/jump is already handled in ID stage
             else {
                 exmem.aluResult = executeALU(aluOp1, aluOp2, idex.controls.aluOp);
-                std::cout << "         ALU operation result: " << exmem.aluResult << std::endl;
             }
+            std::cout << "         ALU operation result: " << exmem.aluResult << std::endl;
             
-            // Handle branches and jumps with forwarded values
-            if (opcode == 0x63) {  // Branch
-                bool condition = false;
-                uint32_t funct3 = (idex.instruction >> 12) & 0x7;
-                condition = evaluateBranchCondition(aluOp1, aluOp2, funct3);
-                
-                if (condition) {
-                    branchTaken = true;
-                    branchTarget = idex.pc + idex.imm;
-                    std::cout << "         Branch taken to PC: " << branchTarget << std::endl;
-                }
-                else {
-                    std::cout << "         Branch not taken" << std::endl;
-                }
-            }
-            else if (opcode == 0x6F) {  // JAL
-                branchTaken = true;
-                branchTarget = idex.pc + idex.imm;
-                std::cout << "         JAL: Jump to PC: " << branchTarget << std::endl;
-            }
-            else if (opcode == 0x67) {  // JALR
-                branchTaken = true;
-                branchTarget = (aluOp1 + idex.imm) & ~1;  // Using forwarded value for rs1
-                std::cout << "         JALR: Jump to PC: " << branchTarget << std::endl;
-            }
-            
-            // Pass values to EX/MEM stage
             exmem.pc = idex.pc;
             exmem.readData2 = idex.readData2;
-            // If we're forwarding for a store instruction, update the data to be stored
-            if (opcode == 0x23 && forwardingUnit.forwardB) {  // STORE instruction
-                if (forwardingUnit.forwardBSource == EX_MEM_FORWARD) {  // From EX/MEM
-                    exmem.readData2 = exmem.aluResult;
-                } else if (forwardingUnit.forwardBSource == MEM_WB_FORWARD) {  // From MEM/WB
-                    exmem.readData2 = memwb.controls.memToReg ? memwb.readData : memwb.aluResult;
-                }
-                std::cout << "         Forwarded value " << exmem.readData2 << " for store instruction" << std::endl;
-            }
             exmem.rd = idex.rd;
             exmem.controls = idex.controls;
             exmem.instruction = idex.instruction;
@@ -276,12 +278,15 @@ void ForwardingProcessor::run(int cycles) {
             std::cout << "Cycle " << cycle << " - EX: No instruction" << std::endl;
         }
         
+        // Remaining stages (ID and IF) remain mostly the same
+        // ...
         // -------------------- ID Stage --------------------
         if (!ifid.isEmpty) {
             std::cout << "Cycle " << cycle << " - ID: Processing " << ifid.instructionString << " at PC: " << ifid.pc << std::endl;
             int idx = getInstructionIndex(ifid.pc);
             if (idx != -1)
                 recordStage(idx, cycle, ID);
+                
             uint32_t instruction = ifid.instruction;
             uint32_t opcode = instruction & 0x7F;
             uint32_t rd  = (instruction >> 7) & 0x1F;
@@ -289,24 +294,45 @@ void ForwardingProcessor::run(int cycles) {
             uint32_t rs2 = (instruction >> 20) & 0x1F;
             int32_t imm = extractImmediate(instruction, opcode);
             
-            // With forwarding, we only need to stall for load-use hazards
-            bool loadUseHazard = false;
-            if (!idex.isEmpty && idex.controls.memRead) {
-                // Check if the instruction in ID/EX is a load and its destination register
-                // is used as a source by the current instruction
-                if (idex.rd != 0 && (idex.rd == rs1 || idex.rd == rs2)) {
-                    loadUseHazard = true;
-                    std::cout << "         Load-use hazard detected: Stalling pipeline." << std::endl;
-                }
-            }
+            // Read register values here for hazard detection and branch computation
+            int32_t rs1Value = registers.read(rs1);
+            int32_t rs2Value = registers.read(rs2);
             
-            if (!loadUseHazard) {
-                // Read register values
-                int32_t rs1Value = registers.read(rs1);
-                int32_t rs2Value = registers.read(rs2);
+            // More precise hazard detection based on instruction type
+            bool hazard = false;
+            
+            // Instructions with no source register dependencies
+            if (opcode == 0x6F || // JAL
+                opcode == 0x37 || // LUI
+                opcode == 0x17) { // AUIPC
+                // No source registers used, no hazard possible
+                hazard = false;
+            }
+            // Instructions with only rs1 dependency
+            else if (opcode == 0x67 || // JALR
+                     opcode == 0x03 || // LOAD
+                     opcode == 0x13) { // I-type ALU
+                // Only check rs1 for hazard
+                hazard = (rs1 != 0 && isRegisterUsedBy(rs1));
+            }
+            // Instructions with both rs1 and rs2 dependencies
+            else if (opcode == 0x33 || // R-type ALU
+                     opcode == 0x23 || // STORE
+                     opcode == 0x63) { // BRANCH
+                // Check both rs1 and rs2 for hazards
+                hazard = ((rs1 != 0 && isRegisterUsedBy(rs1)) || (rs2 != 0 && isRegisterUsedBy(rs2)));
+            }
+
+            if (!hazard) {
+                // Calculate branch or jump target in ID stage if applicable
+                if (opcode == 0x63 || opcode == 0x67 || opcode == 0x6F) {
+                    branchTaken = handleBranchAndJump(opcode, instruction, rs1Value, 
+                                                     imm, ifid.pc, rs2Value, branchTarget);
+                }
                 
-                // For JAL and JALR, calculate PC+4 in ID stage
+                // For JAL and JALR, store PC+4 in register rd
                 if ((opcode == 0x67 || opcode == 0x6F) && rd != 0) {
+                    // Set up the return address to be written to rd in later stages
                     idex.aluResult = ifid.pc + 4;
                     std::cout << "         Setting return address (PC+4): " << idex.aluResult << " for register x" << rd << std::endl;
                 }
@@ -323,17 +349,21 @@ void ForwardingProcessor::run(int cycles) {
                 idex.instructionString = ifid.instructionString;
                 idex.isEmpty = false;
                 idex.isStalled = false;
-                
-                // Add register usage tracking only for instructions that write to registers
-                if (idex.controls.regWrite && rd != 0) {
+                if (idex.controls.regWrite && rd != 0) {                          
                     addRegisterUsage(rd);
-                    std::cout << "         Marking register x" << rd << " as busy " << " size: " << regUsageTracker[rd].size() << std::endl;
+                    std::cout << "         Marking register x" << rd << " as busy "<< " size: "<< regUsageTracker[rd].size() << std::endl;
                 }
             }
             else {
                 stall = true;
                 ifid.isStalled = true;
                 idex.isEmpty = true;
+                std::cout << "         Hazard detected: Stalling pipeline." << std::endl;
+                if (rs1 != 0 && isRegisterUsedBy(rs1))
+                    std::cout << "         Register x" << rs1 << " is in use"<< " size: "<< regUsageTracker[rd].size() << std::endl;
+                if (rs2 != 0 && isRegisterUsedBy(rs2) &&
+                    (opcode == 0x33 || opcode == 0x23 || opcode == 0x63))
+                    std::cout << "         Register x" << rs2 << " is in use"<< " size: "<< regUsageTracker[rd].size() << std::endl;
             }
         }
         else {
@@ -343,13 +373,13 @@ void ForwardingProcessor::run(int cycles) {
         
         // -------------------- IF Stage --------------------
         std::cout << "Stall: " << stall << "; pc: " << pc << "; instructionMemory.size(): " << instructionMemory.size() << std::endl;
-        if (!stall && (pc / 4 < static_cast<int32_t>(instructionMemory.size()))) {
+        if (!stall && (pc / 4 < static_cast<int32_t>(instructionMemory.size()))) {  // Adjusted for signed pc
             ifid.instruction = instructionMemory[pc / 4];
             ifid.pc = pc;
             ifid.instructionString = instructionStrings[pc / 4];
             ifid.isEmpty = false;
             ifid.isStalled = false;
-            int idx = getInstructionIndex(pc);
+            int idx = getInstructionIndex(ifid.pc);
             if (idx != -1)
                 recordStage(idx, cycle, IF);
             std::cout << "Cycle " << cycle << " - IF: Fetched " << ifid.instructionString << " at PC: " << pc << std::endl;
@@ -358,7 +388,7 @@ void ForwardingProcessor::run(int cycles) {
         else if (stall) {
             int idx = getInstructionIndex(pc);
             if (idx != -1)
-                recordStage(idx, cycle, STALL);
+                recordStage(idx, cycle, IF);
             std::cout << "Cycle " << cycle << " - IF: Stall in effect, instruction remains same" << std::endl;
         }
         else {
@@ -369,8 +399,8 @@ void ForwardingProcessor::run(int cycles) {
         // -------------------- End-of-Cycle Processing --------------------
         if (branchTaken) {
             pc = branchTarget;
+            // If we have a branch/jump in ID, we only need to flush IF stage
             ifid.isEmpty = true;
-            idex.isEmpty = true;
             std::cout << "         Flushing pipeline due to branch/jump" << std::endl;
         }
         if (stall) {
@@ -381,3 +411,4 @@ void ForwardingProcessor::run(int cycles) {
         std::cout << "========== Ending Cycle " << cycle << " ==========" << std::endl << std::endl;
     }
 }
+

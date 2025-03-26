@@ -19,7 +19,7 @@ int main(int argc, char** argv) {
     }
     
     processor.run(cycleCount);
-    processor.printPipelineDiagram();
+    processor.printPipelineDiagram(inputFile);
     
     return 0;
 }

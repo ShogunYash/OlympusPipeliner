@@ -10,8 +10,10 @@ public:
     Memory();
     
     uint8_t readByte(uint32_t address) const;
-    uint32_t readWord(uint32_t address) const;  // Returns 32-bit value
+    int16_t readHalfWord(uint32_t address) const;  // Returns 16-bit value (sign extended)
+    int32_t readWord(uint32_t address) const;      // Returns 32-bit value (signed)
     
     void writeByte(uint32_t address, uint8_t value);
-    void writeWord(uint32_t address, uint32_t value);  // Stores 32-bit value
+    void writeHalfWord(uint32_t address, int16_t value);  // Stores 16-bit value
+    void writeWord(uint32_t address, int32_t value);      // Stores 32-bit value (signed)
 };

@@ -4,10 +4,10 @@
 
 class RegisterFile {
 private:
-    std::array<uint32_t, 32> registers;
+    std::array<int32_t, 32> registers;  // Changed from uint32_t to int32_t
 
 public:
     RegisterFile();
-    uint32_t read(uint32_t index) const;
-    void write(uint32_t index, uint32_t value);
+    int32_t read(uint32_t index) const;  // Changed return type to int32_t
+    void write(uint32_t index, int32_t value);  // Changed parameter type to int32_t
 };
