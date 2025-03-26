@@ -545,7 +545,11 @@ void NoForwardingProcessor::printPipelineDiagram(std::string& filename) {
     
     // Get base filename without directory path
     std::string baseFilename = filename.substr(filename.find_last_of("/\\") + 1);
-    baseFilename = baseFilename.substr(0, baseFilename.find_last_not_of('.'));
+    // Fix: Properly extract the filename without extension
+    size_t lastDotPos = baseFilename.find_last_of('.');
+    if (lastDotPos != std::string::npos) {
+        baseFilename = baseFilename.substr(0, lastDotPos);
+    }
     
     // Output file name will be in outputfiles folder with _no_forward_out.csv appended
     std::string outputFilename = outputDir + "/" + baseFilename + "_no_forward_out.csv";

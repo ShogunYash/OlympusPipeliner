@@ -1,7 +1,7 @@
 CXX = g++
 CXXFLAGS = -std=c++17 -Wall -Wextra -pedantic
 
-SRCS = main.cpp Processor.cpp Register.cpp Memory.cpp
+SRCS = main_noforward.cpp Processor.cpp Register.cpp Memory.cpp
 OBJS = $(SRCS:.cpp=.o)
 DEPS = Processor.hpp Register.hpp Memory.hpp PipelineStages.hpp
 
