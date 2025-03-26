@@ -10,7 +10,9 @@
 // Enumeration for pipeline stages.
 // We use STALL to indicate either a stall or an empty cell.
 enum PipelineStage {
-    STALL = 0,
+    SPACE=0,  // Empty cell in the pipeline diagram
+    STALL,
+    SLASH, 
     IF,
     ID,
     EX,
@@ -26,6 +28,7 @@ inline const char* stageToString(PipelineStage stage) {
         case EX:   return "EX";
         case MEM:  return "ME";
         case WB:   return "WB";
+        case SLASH: return "/";
         case STALL: return "- ";
         default:   return "  ";
     }
@@ -45,38 +48,52 @@ public:
     EXMEMRegister exmem;
     MEMWBRegister memwb;
     
-    // Instead of a history map, we use a matrix allocated with malloc.
     // Rows correspond to instructions (in program order) and columns to cycle numbers.
-    PipelineStage** pipelineMatrix; 
+    // Implement new type of pipeline matrix with 3D array to store stages of same instruction in same cycle with vector of stages
+    std::vector<std::vector<std::vector<PipelineStage>>> pipelineMatrix3D;
     int matrixRows;   // equal to number of instructions loaded
     int matrixCols;   // equal to the number of cycles (set when run() is called)
     
     bool stall;
     
-    // Register In-Use Array: true means the register is pending a write-back.
-    bool regInUse[32];
+    // Advanced register usage tracking: vector of vectors to track which instruction uses each register
+    // First dimension is register number (0-31), second dimension is variable-length list of instruction IDs
+    std::vector<std::vector<bool>> regUsageTracker;
     
     // Helper functions
     ControlSignals decodeControlSignals(uint32_t instruction);
     int32_t executeALU(int32_t a, int32_t b, uint32_t aluOp);  // Changed to signed 32-bit
     int32_t extractImmediate(uint32_t instruction, uint32_t opcode);  // Changed to signed 32-bit
     
+    // Branch and jump related functions
+    bool evaluateBranchCondition(int32_t rs1Value, int32_t rs2Value, uint32_t funct3);
+    
+    // Updated to work in ID stage, using register values directly
+    bool handleBranchAndJump(uint32_t opcode, uint32_t instruction, int32_t rs1Value, 
+                            int32_t imm, int32_t pc, int32_t rs2Value, int32_t& branchTarget);
+    
     // Helper to record a stage in the pipeline matrix.
     // 'instrIndex' is the row index (the instruction’s program order index)
     // 'cycle' is the current cycle.
     void recordStage(int instrIndex, int cycle, PipelineStage stage);
     
-    // Helper: returns the index of the given instruction string (or -1 if not found).
-    int getInstructionIndex(const std::string &instrStr) const;
+    // Helper: returns the index of the given pc in that stage
+    int getInstructionIndex(int32_t index) const;
     
-    // Free the pipeline matrix.
-    void freePipelineMatrix();
+    // New helper function to check if a register is used by a specific instruction
+    bool isRegisterUsedBy(uint32_t regNum) const;
+    
+    // New helper function to add tracking of register usage
+    void addRegisterUsage(uint32_t regNum);
+    
+    // New helper function to clear register usage when instruction completes
+    void clearRegisterUsage(uint32_t regNum);
 
 
     NoForwardingProcessor();
     ~NoForwardingProcessor();  // Destructor to free memory
     bool loadInstructions(const std::string& filename);
     virtual void run(int cycles);
-    void printPipelineDiagram(); // Print pipeline diagram to file
+    void printPipelineDiagram(std::string& InputFile); // Print pipeline diagram to file
     size_t getInstructionCount() const { return instructionStrings.size(); }
 };

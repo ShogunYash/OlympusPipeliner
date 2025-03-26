@@ -19,11 +19,13 @@ private:
         ForwardingSource forwardBSource = NO_FORWARD;
     };
 
+    // Override the run method to implement forwarding
+    
+
     // Check for forwarding conditions
     ForwardingUnit checkForwarding();
 
 public:
-    // Override the run method to implement forwarding
     virtual void run(int cycles) override;
     ForwardingProcessor();
     virtual ~ForwardingProcessor() = default;
