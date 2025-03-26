@@ -35,7 +35,7 @@ inline const char* stageToString(PipelineStage stage) {
 }
 
 class NoForwardingProcessor {
-private:
+public:
     int32_t pc;  // Changed to signed 32-bit
     RegisterFile registers;
     Memory dataMemory;
@@ -89,11 +89,9 @@ private:
     // New helper function to clear register usage when instruction completes
     void clearRegisterUsage(uint32_t regNum);
 
-public:
     NoForwardingProcessor();
     ~NoForwardingProcessor();  // Destructor to free memory
     bool loadInstructions(const std::string& filename);
-    void run(int cycles);
-    void printPipelineDiagram(std::string& InputFile); // Print pipeline diagram to file
-    size_t getInstructionCount() const { return instructionStrings.size(); }
+    virtual void run(int cycles);
+    virtual void printPipelineDiagram(std::string& InputFile); // Print pipeline diagram to file
 };
