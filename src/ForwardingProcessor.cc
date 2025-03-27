@@ -24,6 +24,7 @@ void ForwardingProcessor::run(int cycles) {
     exmem.isEmpty = true;
     memwb.isEmpty = true;
     Imm_valid = true;
+    bool clear = false;
     // Allocate the pipeline matrix.
     matrixRows = static_cast<int>(instructionStrings.size());
     matrixCols = cycles;
@@ -213,12 +214,22 @@ void ForwardingProcessor::run(int cycles) {
             int32_t rs2Value = registers.read(rs2);
             
             // use opcode to find whether the instruction is a branch or jump
-            if (!(opcode==0x67 || opcode==0x63 || opcode== 0x6F)) {
+            clear = false;
+            bool rs1UsedEX = (rs1 == exmem.rd && exmem.controls.regWrite && exmem.rd != 0 && !exmem.controls.memToReg);
+            bool rs1UsedMEM = (rs1 == memwb.rd && exmem.controls.memToReg && rs1!=0);
+            bool rs2UsedEX = (rs2 == exmem.rd && exmem.controls.regWrite && exmem.rd != 0 && !exmem.controls.memToReg);
+            bool rs2UsedMEM = (rs2 == memwb.rd && exmem.controls.memToReg && rs2!=0);
+            clear = (opcode == 0x67 &&( rs1UsedEX || rs1UsedMEM)) || (opcode == 0x63 && (rs1UsedEX || rs1UsedMEM || rs2UsedEX || rs2UsedMEM));
+            if (!clear) {
                 // Updating register usage for Ex and Mem stage for forwarding and not for branch/jump instructions
-                if(!exmem.isEmpty && exmem.controls.regWrite && exmem.rd != 0 && !exmem.controls.memToReg)
+                if(!exmem.isEmpty && exmem.controls.regWrite && exmem.rd != 0 && !exmem.controls.memToReg){
                     clearRegisterUsage(exmem.rd);
-                if(!memwb.isEmpty && memwb.controls.memToReg && memwb.rd != 0 && memwb.controls.regWrite)
+                    std::cout<<"----------------------> x"<< exmem.rd << " is not a branch or jump instruction"<<std::endl;
+                }
+                if(!memwb.isEmpty && memwb.controls.memToReg && memwb.rd != 0 && memwb.controls.regWrite){
                     clearRegisterUsage(memwb.rd);
+                    std::cout<<"----------------------> x"<< memwb.rd << " is not a branch or jump instruction"<<std::endl;
+                }
             }
             // More precise hazard detection based on instruction type
             bool hazard = false;
@@ -284,8 +295,8 @@ void ForwardingProcessor::run(int cycles) {
         }
         
         // Updating register usage for Ex and Mem stage for forwarding and branch/jump instructions
-        uint32_t opcode =  ifid.instruction & 0x7F;
-        if(opcode == 0x67 || opcode == 0x63 || opcode == 0x6F) {
+        // uint32_t opcode =  ifid.instruction & 0x7F;
+        if(clear) {
             if(!exmem.isEmpty && exmem.controls.regWrite && exmem.rd != 0 && !exmem.controls.memToReg){
                 clearRegisterUsage(exmem.rd);
             }

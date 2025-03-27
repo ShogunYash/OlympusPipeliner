@@ -210,7 +210,10 @@ int NoForwardingProcessor::getInstructionIndex(int32_t index) const {
 // ---------------------- Register Usage Tracker Functions ----------------------
 bool NoForwardingProcessor::isRegisterUsedBy(uint32_t regNum) const {
     // Check if instrIndex exists in the usage list for the register
-    if (regUsageTracker[regNum].empty()) return false;
+    if (regUsageTracker[regNum].empty()) 
+        return false;
+    if(regUsageTracker[regNum].size()==0) 
+        return false;
     return true;
 }
 
@@ -305,6 +308,7 @@ bool NoForwardingProcessor::detect_hazard(bool hazard, uint32_t opcode, uint32_t
                 opcode == 0x13) { // I-type ALU
         // Only check rs1 for hazard
         hazard = (rs1 != 0 && isRegisterUsedBy(rs1));
+        std::cout<<"---------------> x"<<rs1<<" is used by instruction "<<std::endl;
     }
     // Instructions with both rs1 and rs2 dependencies
     else if (opcode == 0x33 || // R-type ALU
@@ -620,7 +624,7 @@ void NoForwardingProcessor::printPipelineDiagram(std::string& filename, bool isf
     std::string outputFilename;
     // Output file name will be in outputfiles folder with _no_forward_out.csv appended
     if (!isforwardcpu)
-        outputFilename = outputDir + "/" + baseFilename + "_no_forward_out.csv";
+        outputFilename = outputDir + "/" + baseFilename + "_noforward_out.csv";
     else
         outputFilename = outputDir + "/" + baseFilename + "_forward_out.csv";
         
