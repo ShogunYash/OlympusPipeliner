@@ -1,9 +1,0 @@
-make the instruction index access through the index value of the pipeline.
-lb byte working 
-for int_min_max their in ripes after one run not matching
-make output.txt in output folder with input file name abbrevation then output
-calling c function some error see
-Almost all testing done for nonforwarding
-Now check forwarding
-lui needs to be added
-changed branch to false remember to make it true

@@ -29,7 +29,7 @@ inline const char* stageToString(PipelineStage stage) {
         case MEM:  return "MEM";
         case WB:   return "WB";
         case SLASH: return "/";
-        case STALL: return "- ";
+        case STALL: return "-";
         default:   return "  ";
     }
 }

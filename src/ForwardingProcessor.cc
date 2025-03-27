@@ -181,7 +181,7 @@ void ForwardingProcessor::run(int cycles) {
             exmem.isEmpty = false;
 
             // Adding forwarding logic here when EX stage computes a register value to write
-            if (exmem.controls.regWrite && exmem.rd != 0 && !exmem.controls.memToReg) {
+            if (exmem.controls.regWrite && exmem.rd != 0 && !exmem.controls.memToReg && !(opcode == 0x6F)) {
                 int32_t writeData = exmem.aluResult;
                 registers.write(exmem.rd, writeData);
                 // // get opcodes for branches and jumps
@@ -231,6 +231,7 @@ void ForwardingProcessor::run(int cycles) {
                     std::cout<<"----------------------> x"<< memwb.rd << " is not a branch or jump instruction"<<std::endl;
                 }
             }
+
             // More precise hazard detection based on instruction type
             bool hazard = false;
             hazard = detect_hazard(hazard, opcode, rs1, rs2);
@@ -273,9 +274,16 @@ void ForwardingProcessor::run(int cycles) {
                     std::cout<<"----------------------> Breaking the simulation"<<std::endl;
                     return;
                 }
-                if (idex.controls.regWrite && rd != 0) {                          
+                if (idex.controls.regWrite && rd != 0 ) {                          
                     addRegisterUsage(rd);
                     std::cout << "         Marking register x" << rd << " as busy "<< " size: "<< regUsageTracker[rd].size() << std::endl;
+                }
+                
+                if(opcode == 0x6F && rd != 0){
+                    registers.write(rd, idex.aluResult);
+                    std::cout << "         Written " << idex.aluResult << " to register x" << rd << std::endl;
+                    clearRegisterUsage(rd);
+                    std::cout<<"----------------------> x"<< rd << " is not a branch or jump instruction"<<std::endl;
                 }
             }
             else {

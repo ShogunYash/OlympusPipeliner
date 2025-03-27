@@ -624,9 +624,9 @@ void NoForwardingProcessor::printPipelineDiagram(std::string& filename, bool isf
     std::string outputFilename;
     // Output file name will be in outputfiles folder with _no_forward_out.txt appended
     if (!isforwardcpu)
-        outputFilename = outputDir + "/" + baseFilename + "_noforward_out.csv";
+        outputFilename = outputDir + "/" + baseFilename + "_noforward_out.txt";
     else
-        outputFilename = outputDir + "/" + baseFilename + "_forward_out.csv";
+        outputFilename = outputDir + "/" + baseFilename + "_forward_out.txt";
         
     std::ofstream outFile(outputFilename);
     
@@ -652,7 +652,7 @@ void NoForwardingProcessor::printPipelineDiagram(std::string& filename, bool isf
     // Print header with fixed width
     outFile << std::left << std::setw(instrColumnWidth) << "Instruction";
     for (int i = 0; i < matrixCols; i++) {
-        outFile << "," << i;
+        outFile << ";" << i;
     }
     outFile << std::endl;
     
@@ -672,7 +672,7 @@ void NoForwardingProcessor::printPipelineDiagram(std::string& filename, bool isf
             // Get all stages for this instruction in this cycle
             const std::vector<PipelineStage>& stages = pipelineMatrix3D[i][j];
             // Start with a comma for CSV format
-            outFile << ",";
+            outFile << ";";
             
             // If there are no stages or only SPACE, print empty cell
             if (stages.size() == 1 && stages[0] == SPACE) {
@@ -684,7 +684,7 @@ void NoForwardingProcessor::printPipelineDiagram(std::string& filename, bool isf
             // Print first stage and stall if previous stage is same as current stage
             if (stages.size()==1){
                 if (stages[0]==prevStage && stages[0]!=SPACE)
-                    outFile << "- ";
+                    outFile << "-";
                 else
                     outFile << stageToString(stages[0]);
                 prevStage = stages[0];
