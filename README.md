@@ -128,6 +128,7 @@ OlympusPipeliner is a comprehensive RISC-V pipeline processor simulator that off
 
 ## Known Issues 
 - **No assumptions have been made and actual register processing has been simulated to mirror actual RIPES(actually better than ripes as ours does branch resolution in ID) and no Known Issues of now correctly giving output to all the examples(we took float as int in programs requiring it , as told in piazza post to not implement floating point calculation) mentioned in https://marz.utk.edu/my-courses/cosc230/book/example-risc-v-assembly-programs/**
+- la instruction was given in the examples website, but as that is a pseudo instruction we haven't supported it 
 
 ### Building the Project
 ```
@@ -137,5 +138,3 @@ OlympusPipeliner is a comprehensive RISC-V pipeline processor simulator that off
 - Computer Organization and Design RISC-V Edition: The Hardware Software Interface by David A. Patterson and John L. Hennessy
 - Various online resources and academic papers on pipeline processor design
 
-## Known Issues
-- There is no branch predictor as told in the assignment pdf so might not be as efficient in pipelining as actual processors.
