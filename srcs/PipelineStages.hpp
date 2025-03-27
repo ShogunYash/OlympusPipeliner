@@ -11,6 +11,7 @@ struct ControlSignals {
     bool aluSrc;
     bool branch;
     bool jump;
+    bool illegal_instruction;    // Added to support illegal instruction detection
     uint32_t aluOp;
 };
 

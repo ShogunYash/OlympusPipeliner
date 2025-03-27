@@ -48,7 +48,7 @@ outputdir:
 	mkdir -p ../outputfiles
 
 clean:
-	rm -f *.o noforward forward disasm
+	rm -f *.o noforward forward 
 
 # Run targets
 run_noforward: noforward

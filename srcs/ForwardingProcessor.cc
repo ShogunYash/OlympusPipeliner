@@ -255,6 +255,13 @@ void ForwardingProcessor::run(int cycles) {
                 idex.instruction = ifid.instruction;
                 idex.instructionString = ifid.instructionString;
                 idex.isEmpty = false;
+                // Added to support illegal instruction detection
+                if(idex.controls.illegal_instruction){
+                    std::cout<<"Illegal instruction detected at PC: "<< ifid.pc <<std::endl;
+                    std::cout<<"Instruction: "<<ifid.instructionString<<std::endl;
+                    std::cout<<"----------------------> Breaking the simulation"<<std::endl;
+                    return;
+                }
                 if (idex.controls.regWrite && rd != 0) {                          
                     addRegisterUsage(rd);
                     std::cout << "         Marking register x" << rd << " as busy "<< " size: "<< regUsageTracker[rd].size() << std::endl;

@@ -9,7 +9,6 @@
 #include <string.h>
 
 // ---------------------- Helper Functions ----------------------
-
 // In our updated design we still use your old immediate extraction, etc.
 int32_t NoForwardingProcessor::extractImmediate(uint32_t instruction, uint32_t opcode) {
     int32_t imm = 0;
@@ -62,7 +61,8 @@ ControlSignals NoForwardingProcessor::decodeControlSignals(uint32_t instruction)
     signals.branch = false;
     signals.jump = false;
     signals.aluOp = 0;
-    
+    signals.illegal_instruction = false;
+
     switch (opcode) {
         case 0x33:  // R-type
             signals.regWrite = true;
@@ -149,6 +149,8 @@ ControlSignals NoForwardingProcessor::decodeControlSignals(uint32_t instruction)
             break;
             
         default:
+            std::cerr << "Unknown opcode: 0x" << std::hex << opcode << std::endl;
+            signals.illegal_instruction = true; // Add this flag to ControlSignals
             break;
     }
     return signals;
@@ -182,7 +184,6 @@ int32_t NoForwardingProcessor::executeALU(int32_t a, int32_t b, uint32_t aluOp) 
 }
 
 // ---------------------- Pipeline Matrix Helpers ----------------------
-
 // Record a stage value for an instruction row at a given cycle.
 void NoForwardingProcessor::recordStage(int instrIndex, int cycle, PipelineStage stage) {
     if (instrIndex < 0 || instrIndex >= matrixRows || cycle < 0 || cycle >= matrixCols)
@@ -206,9 +207,7 @@ int NoForwardingProcessor::getInstructionIndex(int32_t index) const {
     return static_cast<int>(index / 4);
 }
 
-
 // ---------------------- Register Usage Tracker Functions ----------------------
-
 bool NoForwardingProcessor::isRegisterUsedBy(uint32_t regNum) const {
     // Check if instrIndex exists in the usage list for the register
     if (regUsageTracker[regNum].empty()) return false;
@@ -228,7 +227,6 @@ void NoForwardingProcessor::clearRegisterUsage(uint32_t regNum) {
 }
 
 // ---------------------- Constructor/Destructor ----------------------
-
 NoForwardingProcessor::NoForwardingProcessor() : 
     pc(0), 
     stall(false),
@@ -241,7 +239,6 @@ NoForwardingProcessor::~NoForwardingProcessor() {
 }
 
 // ---------------------- Instruction Loading ---------------------- 
-
 bool NoForwardingProcessor::loadInstructions(const std::string& filename) {
     std::ifstream file(filename);
     if (!file.is_open()) {
@@ -293,40 +290,7 @@ bool NoForwardingProcessor::loadInstructions(const std::string& filename) {
     return !instructionMemory.empty();
 }
 
-// bool NoForwardingProcessor::loadInstructions(const std::string& filename) {
-//     std::ifstream file(filename);
-//     if (!file.is_open()) {
-//         std::cerr << "Error: Cannot open file " << filename << std::endl;
-//         return false;
-//     }
-    
-//     std::string line;
-//     std::cout << "Loading instructions from " << filename << ":" << std::endl;
-//     while (std::getline(file, line)) {
-//         if (line.empty() || line.find_first_not_of(" \t") == std::string::npos)
-//             continue;
-        
-//         std::istringstream iss(line);
-//         std::string hexCode, instructionDesc;
-//         std::getline(iss, hexCode, ';');
-//         std::getline(iss, instructionDesc);
-//         hexCode.erase(0, hexCode.find_first_not_of(" \t"));
-//         hexCode.erase(hexCode.find_last_not_of(" \t") + 1);
-//         instructionDesc.erase(0, instructionDesc.find_first_not_of(" \t"));
-//         instructionDesc.erase(instructionDesc.find_last_not_of(" \t") + 1);
-//         if (hexCode.empty())
-//             continue;
-//         std::cout << "  Hex: " << hexCode 
-//                   << " -> Instruction: " << (instructionDesc.empty() ? hexCode : instructionDesc)
-//                   << std::endl;
-//         uint32_t instruction = std::stoul(hexCode, nullptr, 16);
-//         instructionMemory.push_back(instruction);
-//         instructionStrings.push_back(instructionDesc.empty() ? hexCode : instructionDesc);
-//     }
-//     std::cout << "Loaded " << instructionMemory.size() << " instructions."<< " Instruction strings size: "<<instructionStrings.size() << std::endl;
-//     return !instructionMemory.empty();
-// }
-
+// ---------------------- Hazard Detection ----------------------
 bool NoForwardingProcessor::detect_hazard(bool hazard, uint32_t opcode, uint32_t rs1, uint32_t rs2) {
     // Instructions with no source register dependencies
     if (opcode == 0x6F || // JAL
@@ -352,9 +316,7 @@ bool NoForwardingProcessor::detect_hazard(bool hazard, uint32_t opcode, uint32_t
     return hazard;
 }
 
-
 // ---------------------- Run Simulation ----------------------
-
 void NoForwardingProcessor::run(int cycles) {
     // Reset pipeline state.
     pc = 0;
@@ -543,7 +505,7 @@ void NoForwardingProcessor::run(int cycles) {
                     branchTaken = handleBranchAndJump(opcode, instruction, rs1Value, 
                                                      imm, ifid.pc, rs2Value, branchTarget);
                     if(!Imm_valid){
-                        std::cout<<"Invalid Immediate value"<<std::endl;
+                        std::cout<<"Invalid Immediate value at PC: "<< ifid.pc <<std::endl;
                         std::cout<<"Instruction: "<<ifid.instructionString<<std::endl;
                         std::cout<<"----------------------> Breaking the simulation"<<std::endl;
                         return;
@@ -568,6 +530,13 @@ void NoForwardingProcessor::run(int cycles) {
                 idex.instruction = ifid.instruction;
                 idex.instructionString = ifid.instructionString;
                 idex.isEmpty = false;
+                // Check for illegal instruction
+                if(idex.controls.illegal_instruction){
+                    std::cout<<"Illegal instruction detected at PC: "<< ifid.pc <<std::endl;
+                    std::cout<<"Instruction: "<<ifid.instructionString<<std::endl;
+                    std::cout<<"----------------------> Breaking the simulation"<<std::endl;
+                    return;
+                }
                 if (idex.controls.regWrite && rd != 0) {                          
                     addRegisterUsage(rd);
                     std::cout << "         Marking register x" << rd << " as busy "<< " size: "<< regUsageTracker[rd].size() << std::endl;
@@ -629,7 +598,6 @@ void NoForwardingProcessor::run(int cycles) {
 }
 
 // ---------------------- Print Pipeline Diagram ----------------------
-
 void NoForwardingProcessor::printPipelineDiagram(std::string& filename, bool isforwardcpu) {
     // Create outputfiles directory if it doesn't exist - one level above srcs directory
     std::string outputDir = "../outputfiles";
