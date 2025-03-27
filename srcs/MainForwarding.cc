@@ -28,7 +28,7 @@ int main(int argc, char* argv[]) {
     processor.run(cycles);
     
     // Print pipeline diagram
-    processor.printPipelineDiagram(filename);
+    processor.printPipelineDiagram(filename, true);
     
     std::cout << "Forwarding simulation complete. Results written to CSV file." << std::endl;
     return 0;

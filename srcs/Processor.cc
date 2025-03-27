@@ -285,7 +285,7 @@ void NoForwardingProcessor::run(int cycles) {
             if (memwb.controls.regWrite && memwb.rd != 0) {
                 int32_t writeData = memwb.controls.memToReg ? memwb.readData : memwb.aluResult;
                 registers.write(memwb.rd, writeData);
-                clearRegisterUsage(memwb.rd);
+                clearRegisterUsage(memwb.rd);       
                 std::cout << "         Written " << writeData << " to register x" << memwb.rd << std::endl;
             }
         }
@@ -439,7 +439,8 @@ void NoForwardingProcessor::run(int cycles) {
                 // Check both rs1 and rs2 for hazards
                 hazard = ((rs1 != 0 && isRegisterUsedBy(rs1)) || (rs2 != 0 && isRegisterUsedBy(rs2)));
             }
-
+            
+            //  If no hazards not detected
             if (!hazard) {
                 // Calculate branch or jump target in ID stage if applicable
                 if (opcode == 0x63 || opcode == 0x67 || opcode == 0x6F) {
@@ -495,7 +496,6 @@ void NoForwardingProcessor::run(int cycles) {
             ifid.pc = pc;
             ifid.instructionString = instructionStrings[pc / 4];
             ifid.isEmpty = false;
-            ifid.isStalled = false;
             int idx = getInstructionIndex(ifid.pc);
             if (idx != -1)
                 recordStage(idx, cycle, IF);
@@ -522,7 +522,6 @@ void NoForwardingProcessor::run(int cycles) {
         }
         if (stall) {
             stall = false;
-            ifid.isStalled = false;
         }
         
         std::cout << "========== Ending Cycle " << cycle << " ==========" << std::endl << std::endl;
@@ -531,7 +530,7 @@ void NoForwardingProcessor::run(int cycles) {
 
 // ---------------------- Print Pipeline Diagram ----------------------
 
-void NoForwardingProcessor::printPipelineDiagram(std::string& filename) {
+void NoForwardingProcessor::printPipelineDiagram(std::string& filename, bool isforwardcpu) {
     // Create outputfiles directory if it doesn't exist - one level above srcs directory
     std::string outputDir = "../outputfiles";
     
@@ -550,9 +549,13 @@ void NoForwardingProcessor::printPipelineDiagram(std::string& filename) {
     if (lastDotPos != std::string::npos) {
         baseFilename = baseFilename.substr(0, lastDotPos);
     }
-    
+    std::string outputFilename;
     // Output file name will be in outputfiles folder with _no_forward_out.csv appended
-    std::string outputFilename = outputDir + "/" + baseFilename + "_no_forward_out.csv";
+    if (!isforwardcpu)
+        outputFilename = outputDir + "/" + baseFilename + "_no_forward_out.csv";
+    else
+        outputFilename = outputDir + "/" + baseFilename + "_forward_out.csv";
+        
     std::ofstream outFile(outputFilename);
     
     if (!outFile.is_open()) {
@@ -669,8 +672,13 @@ bool NoForwardingProcessor::handleBranchAndJump(uint32_t opcode, uint32_t instru
         std::cout << "         JAL: Jump to PC: " << branchTarget << std::endl;
     }
     else if (opcode == 0x67) {  // JALR
-        branchTaken = true;
-        branchTarget = (rs1Value + imm) & ~1; // Clear least significant bit per spec
+        if (imm%4==0){
+            branchTaken = true;
+            branchTarget = (rs1Value + imm) ; // Clear least significant bit per spec
+        }
+        else {
+            std::cout << " Wrong Imm"<<std::endl;
+        }
         std::cout << "-> Return register data " << rs1Value << "         JALR: Jump to PC: " << branchTarget << std::endl;
     }
     

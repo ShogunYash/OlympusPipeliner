@@ -6,3 +6,5 @@ calling c function some error see
 Almost all testing done for nonforwarding
 Now check forwarding
 la is not added
+lui needs to be added
+changed branch to false remember to make it true

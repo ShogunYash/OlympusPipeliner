@@ -14,7 +14,6 @@ ForwardingProcessor::ForwardingProcessor() :
 ForwardingProcessor::~ForwardingProcessor() {
 }
 
-
 // Override run method to implement forwarding
 void ForwardingProcessor::run(int cycles) {
     // Reset pipeline state.
@@ -123,7 +122,7 @@ void ForwardingProcessor::run(int cycles) {
             if (memwb.controls.memToReg && memwb.rd != 0 && memwb.controls.regWrite) {
                 int32_t writeData = memwb.readData;
                 registers.write(memwb.rd, writeData);
-                clearRegisterUsage(memwb.rd);
+                // clearRegisterUsage(memwb.rd);
                 std::cout << "         Written " << writeData << " to register x" << memwb.rd << std::endl;
             }
         }
@@ -172,7 +171,7 @@ void ForwardingProcessor::run(int cycles) {
             if (exmem.controls.regWrite && exmem.rd != 0 && !exmem.controls.memToReg) {
                 int32_t writeData = exmem.aluResult;
                 registers.write(exmem.rd, writeData);
-                clearRegisterUsage(exmem.rd);
+                // clearRegisterUsage(exmem.rd);
                 std::cout << "         Written " << writeData << " to register x" << exmem.rd << std::endl;
             }
         }
@@ -298,6 +297,15 @@ void ForwardingProcessor::run(int cycles) {
         }
         
         // -------------------- End-of-Cycle Processing --------------------
+
+        // Updating register usage for Ex and Mem stage for forwarding
+        if(!exmem.isEmpty && exmem.controls.regWrite && exmem.rd != 0 && !exmem.controls.memToReg){
+
+            clearRegisterUsage(exmem.rd);
+        }
+        if(!memwb.isEmpty && memwb.controls.memToReg && memwb.rd != 0 && memwb.controls.regWrite)
+            clearRegisterUsage(memwb.rd);
+
         if (branchTaken) {
             pc = branchTarget;
             // If we have a branch/jump in ID, we only need to flush IF stage
@@ -311,102 +319,4 @@ void ForwardingProcessor::run(int cycles) {
         
         std::cout << "========== Ending Cycle " << cycle << " ==========" << std::endl << std::endl;
     }
-}
-
-void ForwardingProcessor::printPipelineDiagram(std::string& filename) {
-    // Create outputfiles directory if it doesn't exist - one level above srcs directory
-    std::string outputDir = "../outputfiles";
-    
-    #ifdef _WIN32
-    // Windows-specific directory creation
-    system(("mkdir " + outputDir + " 2>nul").c_str());
-    #else
-    // Linux/Unix directory creation
-    system(("mkdir -p " + outputDir).c_str());
-    #endif
-    
-    // Get base filename without directory path
-    std::string baseFilename = filename.substr(filename.find_last_of("/\\") + 1);
-    // Fix: Properly extract the filename without extension
-    size_t lastDotPos = baseFilename.find_last_of('.');
-    if (lastDotPos != std::string::npos) {
-        baseFilename = baseFilename.substr(0, lastDotPos);
-    }
-    
-    // Output file name will be in outputfiles folder with _no_forward_out.csv appended
-    std::string outputFilename = outputDir + "/" + baseFilename + "_forward_out.csv";
-    std::ofstream outFile(outputFilename);
-    
-    if (!outFile.is_open()) {
-        std::cerr << "Error: Unable to open " << outputFilename << " for writing" << std::endl;
-        return;
-    }
-    
-    std::cout << "Writing pipeline diagram to " << outputFilename << std::endl;
-    
-    // Find the longest instruction string to determine column width
-    size_t maxInstrLength = 0;
-    for (const auto& instr : instructionStrings) {
-        std::string cleanInstr = instr;
-        cleanInstr.erase(std::remove(cleanInstr.begin(), cleanInstr.end(), '\n'), cleanInstr.end());
-        cleanInstr.erase(std::remove(cleanInstr.begin(), cleanInstr.end(), '\r'), cleanInstr.end());
-        maxInstrLength = std::max(maxInstrLength, cleanInstr.length());
-    }
-    
-    // Set a minimum width for the instruction column (at least 20 characters)
-    const size_t instrColumnWidth = std::max(maxInstrLength, static_cast<size_t>(20));
-
-    // Print header with fixed width
-    outFile << std::left << std::setw(instrColumnWidth) << "Instruction";
-    for (int i = 0; i < matrixCols; i++) {
-        outFile << "," << i;
-    }
-    outFile << std::endl;
-    
-    // For each instruction (row), print the stage per cycle with fixed width
-    for (int i = 0; i < matrixRows; i++) {  
-        std::string instr = instructionStrings[i];
-        // Clean the instruction text
-        instr.erase(std::remove(instr.begin(), instr.end(), '\n'), instr.end());
-        instr.erase(std::remove(instr.begin(), instr.end(), '\r'), instr.end());
-        
-        // Print the instruction with fixed width
-        outFile << std::left << std::setw(instrColumnWidth) << instr;
-        
-        PipelineStage prevStage = SPACE;
-        // Print each cycle's stage
-        for (int j = 0; j < matrixCols; j++) {
-            // Get all stages for this instruction in this cycle
-            const std::vector<PipelineStage>& stages = pipelineMatrix3D[i][j];
-            // Start with a comma for CSV format
-            outFile << ",";
-            
-            // If there are no stages or only SPACE, print empty cell
-            if (stages.size() == 1 && stages[0] == SPACE) {
-                outFile << "  "; // Print spaces for empty cell
-                prevStage = SPACE;
-                continue;
-            }
-            
-            // Print first stage and stall if previous stage is same as current stage
-            if (stages.size()==1){
-                if (stages[0]==prevStage && stages[0]!=SPACE)
-                    outFile << "- ";
-                else
-                    outFile << stageToString(stages[0]);
-                prevStage = stages[0];
-            }
-            else{
-                // Print stages in reverse format if there are multiple stages
-                outFile << stageToString(stages[stages.size()-1]);
-                for (int k = stages.size()-2; k >= 0; k--) {
-                    outFile<<"/"<<stageToString(stages[k]);
-                }
-                prevStage = SPACE;
-            }
-        }
-        
-        outFile << std::endl;
-    }
-    outFile.close();
 }

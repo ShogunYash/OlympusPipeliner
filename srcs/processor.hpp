@@ -26,7 +26,7 @@ inline const char* stageToString(PipelineStage stage) {
         case IF:   return "IF";
         case ID:   return "ID";
         case EX:   return "EX";
-        case MEM:  return "ME";
+        case MEM:  return "MEM";
         case WB:   return "WB";
         case SLASH: return "/";
         case STALL: return "- ";
@@ -93,5 +93,5 @@ public:
     ~NoForwardingProcessor();  // Destructor to free memory
     bool loadInstructions(const std::string& filename);
     virtual void run(int cycles);
-    virtual void printPipelineDiagram(std::string& InputFile); // Print pipeline diagram to file
+    void printPipelineDiagram(std::string& InputFile, bool isforwardcpu); // Print pipeline diagram to file
 };
