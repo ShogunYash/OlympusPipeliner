@@ -145,7 +145,7 @@ def main():
     global script_dir
     script_dir = os.path.dirname(os.path.abspath(__file__))
     input_dir = os.path.join(script_dir, 'inputfiles')
-    src_dir = os.path.join(script_dir, 'srcs')
+    src_dir = os.path.join(script_dir, 'src')
     output_dir = os.path.join(script_dir, 'outputfiles')
     
     process_input_files(input_dir, src_dir, output_dir)
