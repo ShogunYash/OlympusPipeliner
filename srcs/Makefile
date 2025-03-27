@@ -5,7 +5,7 @@ CXXFLAGS = -std=c++17 -Wall -Wextra -pedantic
 COMMON_SRCS = Processor.cc Register.cc Memory.cc
 NOFORWARD_SRCS = MainNoForwarding.cc
 FORWARD_SRCS = MainForwarding.cc ForwardingProcessor.cc
-DISASM_SRCS = RiscVDisassembler.cc
+# DISASM_SRCS = RiscVDisassembler.cc
 
 # Object files
 COMMON_OBJS = $(COMMON_SRCS:.cc=.o)
@@ -18,7 +18,7 @@ DEPS = Processor.hpp Register.hpp Memory.hpp PipelineStages.hpp
 FORWARD_DEPS = ForwardingProcessor.hpp $(DEPS)
 
 # Targets
-all: noforward forward disasm
+all: noforward forward 
 
 noforward: $(COMMON_OBJS) $(NOFORWARD_OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^
@@ -26,8 +26,8 @@ noforward: $(COMMON_OBJS) $(NOFORWARD_OBJS)
 forward: $(COMMON_OBJS) $(FORWARD_OBJS)
 	$(CXX) $(CXXFLAGS) -o $@ $^
 
-disasm: $(DISASM_OBJS)
-	$(CXX) $(CXXFLAGS) -o $@ $^
+# disasm: $(DISASM_OBJS)
+# 	$(CXX) $(CXXFLAGS) -o $@ $^
 
 # Compile common source files
 %.o: %.cc $(DEPS)
@@ -40,8 +40,8 @@ ForwardingProcessor.o: ForwardingProcessor.cc $(FORWARD_DEPS)
 MainForwarding.o: MainForwarding.cc $(FORWARD_DEPS)
 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
-RiscVDisassembler.o: RiscVDisassembler.cc
-	$(CXX) $(CXXFLAGS) -c $< -o $@
+# RiscVDisassembler.o: RiscVDisassembler.cc
+# 	$(CXX) $(CXXFLAGS) -c $< -o $@
 
 # Create output directory
 outputdir:
@@ -57,8 +57,8 @@ run_noforward: noforward
 run_forward: forward
 	./forward $(FILE) $(CYCLES)
 
-run_disasm: disasm
-	./disasm $(INPUT) $(OUTPUT)
+# run_disasm: disasm
+# 	./disasm $(INPUT) $(OUTPUT)
 
 # Help message
 help:

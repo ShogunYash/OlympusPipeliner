@@ -19,10 +19,9 @@ struct IFIDRegister {
     int32_t pc;                   // Changed from uint32_t to int32_t
     uint32_t instruction;         // Raw machine code.
     std::string instructionString;
-    bool isStalled;
     bool isEmpty;
 
-    IFIDRegister() : pc(0), instruction(0), isStalled(false), isEmpty(true) {}
+    IFIDRegister() : pc(0), instruction(0), isEmpty(true) {}
 };
 
 // ID/EX Pipeline Register
@@ -37,12 +36,11 @@ struct IDEXRegister {
     uint32_t rd;
     ControlSignals controls;
     std::string instructionString;
-    bool isStalled;
     bool isEmpty;
     int32_t aluResult;  // Added to support early calculation of return addresses
 
     IDEXRegister() : pc(0), instruction(0), readData1(0), readData2(0), imm(0), rs1(0), rs2(0), rd(0),
-                     isStalled(false), isEmpty(true), aluResult(0) {}
+                     isEmpty(true), aluResult(0) {}
 };
 
 // EX/MEM Pipeline Register
@@ -54,10 +52,9 @@ struct EXMEMRegister {
     uint32_t rd;
     ControlSignals controls;
     std::string instructionString;
-    bool isStalled;
     bool isEmpty;
 
-    EXMEMRegister() : pc(0), instruction(0), aluResult(0), readData2(0), rd(0), isStalled(false), isEmpty(true) {}
+    EXMEMRegister() : pc(0), instruction(0), aluResult(0), readData2(0), rd(0), isEmpty(true) {}
 };
 
 // MEM/WB Pipeline Register
@@ -69,8 +66,7 @@ struct MEMWBRegister {
     uint32_t rd;
     ControlSignals controls;
     std::string instructionString;
-    bool isStalled;
     bool isEmpty;
 
-    MEMWBRegister() : pc(0), instruction(0), aluResult(0), readData(0), rd(0), isStalled(false), isEmpty(true) {}
+    MEMWBRegister() : pc(0), instruction(0), aluResult(0), readData(0), rd(0), isEmpty(true) {}
 };

@@ -53,7 +53,7 @@ public:
     std::vector<std::vector<std::vector<PipelineStage>>> pipelineMatrix3D;
     int matrixRows;   // equal to number of instructions loaded
     int matrixCols;   // equal to the number of cycles (set when run() is called)
-    
+    bool Imm_valid;
     bool stall;
     
     // Advanced register usage tracking: vector of vectors to track which instruction uses each register
@@ -88,7 +88,9 @@ public:
     
     // New helper function to clear register usage when instruction completes
     void clearRegisterUsage(uint32_t regNum);
-
+    
+    // Hazard detector
+    bool detect_hazard(bool hazard, uint32_t opcode, uint32_t rs1, uint32_t rs2);
     NoForwardingProcessor();
     ~NoForwardingProcessor();  // Destructor to free memory
     bool loadInstructions(const std::string& filename);

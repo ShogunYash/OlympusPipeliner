@@ -53,7 +53,7 @@ ControlSignals NoForwardingProcessor::decodeControlSignals(uint32_t instruction)
     uint32_t funct7 = (instruction >> 25) & 0x7F;
     uint32_t funct3 = (instruction >> 12) & 0x7;
     
-    // Default signals.
+    // Default signals
     signals.regWrite = false;
     signals.memRead = false;
     signals.memWrite = false;
@@ -69,49 +69,85 @@ ControlSignals NoForwardingProcessor::decodeControlSignals(uint32_t instruction)
             
             if (funct7 == 0x01) {  // M extension instructions
                 // Set ALU operation based on funct3 for M-extension
-                // We'll use opcodes starting from 10 for M extension operations
-                signals.aluOp = 10 + funct3;
+                signals.aluOp = 10 + funct3;  // Use 10-17 for M-extension
+            } else if (funct7 == 0x20) {
+                // R-type with funct7=0x20 (SUB, SRA)
+                signals.aluOp = 8 + funct3;  // Use 8-15 for R-type with funct7=0x20
             } else {
-                // Original R-type ALU op logic
-                signals.aluOp = funct3 | ((funct7) ? 0x8 : 0);
+                // Standard R-type (funct7=0x00)
+                signals.aluOp = funct3;  // Use 0-7 for basic operations
             }
             break;
+            
         case 0x13:  // I-type
             signals.regWrite = true;
             signals.aluSrc = true;
-            signals.aluOp = (instruction >> 12) & 0x7;
+            
+            // Special case for shifts which use the funct7 field
+            if (funct3 == 0x1 || funct3 == 0x5) {
+                uint32_t shiftType = (instruction >> 30) & 0x1;  // bit 30 distinguishes different shifts
+                if (funct3 == 0x5 && shiftType == 1) {
+                    signals.aluOp = 7;  // Use SRAI (mapped to case 7)
+                } else if (funct3 == 0x5) {
+                    signals.aluOp = 6;  // Use SRLI (mapped to case 6)
+                } else {
+                    signals.aluOp = 2;  // Use SLLI (mapped to case 2)
+                }
+            } 
+            // Special handling for bitwise operations
+            else if (funct3 == 0x6) {  // ORI
+                signals.aluOp = 8;  // Use OR operation (ALU op 8)
+            } 
+            else if (funct3 == 0x7) {  // ANDI
+                signals.aluOp = 9;  // Use AND operation (ALU op 9)
+            }
+            else if (funct3 == 0x4) {  // XORI
+                signals.aluOp = 5;  // Use XOR operation (ALU op 5) 
+            }
+            // All other I-type instructions use funct3 directly
+            else {
+                signals.aluOp = funct3;
+            }
             break;
+            
         case 0x03:  // LOAD
             signals.regWrite = true;
             signals.memRead = true;
             signals.memToReg = true;
             signals.aluSrc = true;
             break;
+            
         case 0x23:  // STORE
             signals.memWrite = true;
             signals.aluSrc = true;
             break;
+            
         case 0x63:  // BRANCH
             signals.branch = true;
-            signals.aluOp = 1;  // Subtraction for comparison.
+            signals.aluOp = 1;  // Subtraction for comparison
             break;
+            
         case 0x6F:  // JAL
             signals.regWrite = true;
             signals.jump = true;
             break;
+            
         case 0x67:  // JALR
             signals.regWrite = true;
             signals.jump = true;
             signals.aluSrc = true;
             break;
+            
         case 0x37:  // LUI
             signals.regWrite = true;
             signals.aluSrc = true;
             break;
+            
         case 0x17:  // AUIPC
             signals.regWrite = true;
             signals.aluSrc = true;
             break;
+            
         default:
             break;
     }
@@ -120,14 +156,14 @@ ControlSignals NoForwardingProcessor::decodeControlSignals(uint32_t instruction)
 
 int32_t NoForwardingProcessor::executeALU(int32_t a, int32_t b, uint32_t aluOp) {
     switch (aluOp) {
-        case 0:  return a + b;                         // ADD
+        case 0:  return a + b;                         // ADD/ADDI
         case 1:  return a - b;                         // SUB
-        case 2:  return a << (b & 0x1F);               // SLL
-        case 3:  return (a < b) ? 1 : 0;               // SLT (already signed)
-        case 4:  return (static_cast<uint32_t>(a) < static_cast<uint32_t>(b)) ? 1 : 0; // SLTU
-        case 5:  return a ^ b;                         // XOR
-        case 6:  return static_cast<uint32_t>(a) >> (b & 0x1F); // SRL (logical shift)
-        case 7:  return a >> (b & 0x1F);               // SRA (arithmetic shift, already signed)
+        case 2:  return a << (b & 0x1F);               // SLL/SLLI
+        case 3:  return (a < b) ? 1 : 0;               // SLT/SLTIparison) - funct3=2parison)
+        case 4:  return (static_cast<uint32_t>(a) < static_cast<uint32_t>(b)) ? 1 : 0; // SLTU/SLTIU/SLTIU (unsigned) - funct3=3/SLTIU (unsigned)
+        case 5:  return a ^ b;                         // XOR/XORI
+        case 6:  return static_cast<uint32_t>(a) >> (b & 0x1F); // SRL/SRLI
+        case 7:  return a >> (b & 0x1F);               // SRA/SRAI
         case 8:  return a | b;                         // OR
         case 9:  return a & b;                         // AND
         
@@ -216,29 +252,106 @@ bool NoForwardingProcessor::loadInstructions(const std::string& filename) {
     std::string line;
     std::cout << "Loading instructions from " << filename << ":" << std::endl;
     while (std::getline(file, line)) {
-        if (line.empty() || line.find_first_not_of(" \t") == std::string::npos)
+        // Trim leading whitespace.
+        line.erase(0, line.find_first_not_of(" \t"));
+        if (line.empty())
             continue;
         
-        std::istringstream iss(line);
-        std::string hexCode, instructionDesc;
-        std::getline(iss, hexCode, ';');
-        std::getline(iss, instructionDesc);
-        hexCode.erase(0, hexCode.find_first_not_of(" \t"));
-        hexCode.erase(hexCode.find_last_not_of(" \t") + 1);
-        instructionDesc.erase(0, instructionDesc.find_first_not_of(" \t"));
-        instructionDesc.erase(instructionDesc.find_last_not_of(" \t") + 1);
-        if (hexCode.empty())
+        // Ensure the line has at least 8 characters for the hex code.
+        if (line.size() < 8) {
+            std::cerr << "Warning: line does not contain enough characters for a valid hex code: " << line << std::endl;
             continue;
+        }
+        
+        // Extract the first 8 characters as the hex code.
+        std::string hexCode = line.substr(0, 8);
+        
+        // Extract the rest of the line as the instruction description and trim it.
+        std::string instructionDesc;
+        if (line.size() > 8) {
+            instructionDesc = line.substr(8);
+            // Trim leading and trailing whitespace.
+            instructionDesc.erase(0, instructionDesc.find_first_not_of(" \t"));
+            instructionDesc.erase(instructionDesc.find_last_not_of(" \t") + 1);
+        }
+        
+        // If instruction description is empty, use hexCode.
+        if (instructionDesc.empty())
+            instructionDesc = hexCode;
+        
         std::cout << "  Hex: " << hexCode 
-                  << " -> Instruction: " << (instructionDesc.empty() ? hexCode : instructionDesc)
+                  << " -> Instruction: " << instructionDesc
                   << std::endl;
+                  
         uint32_t instruction = std::stoul(hexCode, nullptr, 16);
         instructionMemory.push_back(instruction);
-        instructionStrings.push_back(instructionDesc.empty() ? hexCode : instructionDesc);
+        instructionStrings.push_back(instructionDesc);
     }
-    std::cout << "Loaded " << instructionMemory.size() << " instructions."<< " Instruction strings size: "<<instructionStrings.size() << std::endl;
+    
+    std::cout << "Loaded " << instructionMemory.size() << " instructions. Instruction strings size: " 
+              << instructionStrings.size() << std::endl;
     return !instructionMemory.empty();
 }
+
+// bool NoForwardingProcessor::loadInstructions(const std::string& filename) {
+//     std::ifstream file(filename);
+//     if (!file.is_open()) {
+//         std::cerr << "Error: Cannot open file " << filename << std::endl;
+//         return false;
+//     }
+    
+//     std::string line;
+//     std::cout << "Loading instructions from " << filename << ":" << std::endl;
+//     while (std::getline(file, line)) {
+//         if (line.empty() || line.find_first_not_of(" \t") == std::string::npos)
+//             continue;
+        
+//         std::istringstream iss(line);
+//         std::string hexCode, instructionDesc;
+//         std::getline(iss, hexCode, ';');
+//         std::getline(iss, instructionDesc);
+//         hexCode.erase(0, hexCode.find_first_not_of(" \t"));
+//         hexCode.erase(hexCode.find_last_not_of(" \t") + 1);
+//         instructionDesc.erase(0, instructionDesc.find_first_not_of(" \t"));
+//         instructionDesc.erase(instructionDesc.find_last_not_of(" \t") + 1);
+//         if (hexCode.empty())
+//             continue;
+//         std::cout << "  Hex: " << hexCode 
+//                   << " -> Instruction: " << (instructionDesc.empty() ? hexCode : instructionDesc)
+//                   << std::endl;
+//         uint32_t instruction = std::stoul(hexCode, nullptr, 16);
+//         instructionMemory.push_back(instruction);
+//         instructionStrings.push_back(instructionDesc.empty() ? hexCode : instructionDesc);
+//     }
+//     std::cout << "Loaded " << instructionMemory.size() << " instructions."<< " Instruction strings size: "<<instructionStrings.size() << std::endl;
+//     return !instructionMemory.empty();
+// }
+
+bool NoForwardingProcessor::detect_hazard(bool hazard, uint32_t opcode, uint32_t rs1, uint32_t rs2) {
+    // Instructions with no source register dependencies
+    if (opcode == 0x6F || // JAL
+        opcode == 0x37 || // LUI
+        opcode == 0x17) { // AUIPC
+        // No source registers used, no hazard possible
+        hazard = false;
+    }
+    // Instructions with only rs1 dependency
+    else if (opcode == 0x67 || // JALR
+                opcode == 0x03 || // LOAD
+                opcode == 0x13) { // I-type ALU
+        // Only check rs1 for hazard
+        hazard = (rs1 != 0 && isRegisterUsedBy(rs1));
+    }
+    // Instructions with both rs1 and rs2 dependencies
+    else if (opcode == 0x33 || // R-type ALU
+                opcode == 0x23 || // STORE
+                opcode == 0x63) { // BRANCH
+        // Check both rs1 and rs2 for hazards
+        hazard = ((rs1 != 0 && isRegisterUsedBy(rs1)) || (rs2 != 0 && isRegisterUsedBy(rs2)));
+    }
+    return hazard;
+}
+
 
 // ---------------------- Run Simulation ----------------------
 
@@ -247,13 +360,11 @@ void NoForwardingProcessor::run(int cycles) {
     pc = 0;
     stall = false;
     ifid.isEmpty = true;
-    ifid.isStalled = false;
     idex.isEmpty = true;
-    idex.isStalled = false;
     exmem.isEmpty = true;
-    exmem.isStalled = false;
     memwb.isEmpty = true;
-    
+    Imm_valid = true;
+
     // Allocate the pipeline matrix.
     matrixRows = static_cast<int>(instructionStrings.size());
     matrixCols = cycles;
@@ -373,6 +484,11 @@ void NoForwardingProcessor::run(int cycles) {
                 exmem.aluResult = idex.pc + idex.imm;
                 std::cout << "         AUIPC: PC + imm = " << exmem.aluResult << std::endl;
             }
+            // Add special case for LUI
+            else if (opcode == 0x37) { // LUI
+                exmem.aluResult = idex.imm;
+                std::cout << "         LUI: imm = " << exmem.aluResult << std::endl;
+            }
             // For JALR and JAL, override the ALU result
             else if (opcode == 0x67 || opcode == 0x6F) {
                 exmem.aluResult = idex.aluResult;
@@ -418,27 +534,7 @@ void NoForwardingProcessor::run(int cycles) {
             // More precise hazard detection based on instruction type
             bool hazard = false;
             
-            // Instructions with no source register dependencies
-            if (opcode == 0x6F || // JAL
-                opcode == 0x37 || // LUI
-                opcode == 0x17) { // AUIPC
-                // No source registers used, no hazard possible
-                hazard = false;
-            }
-            // Instructions with only rs1 dependency
-            else if (opcode == 0x67 || // JALR
-                     opcode == 0x03 || // LOAD
-                     opcode == 0x13) { // I-type ALU
-                // Only check rs1 for hazard
-                hazard = (rs1 != 0 && isRegisterUsedBy(rs1));
-            }
-            // Instructions with both rs1 and rs2 dependencies
-            else if (opcode == 0x33 || // R-type ALU
-                     opcode == 0x23 || // STORE
-                     opcode == 0x63) { // BRANCH
-                // Check both rs1 and rs2 for hazards
-                hazard = ((rs1 != 0 && isRegisterUsedBy(rs1)) || (rs2 != 0 && isRegisterUsedBy(rs2)));
-            }
+            hazard = detect_hazard(hazard, opcode, rs1, rs2);
             
             //  If no hazards not detected
             if (!hazard) {
@@ -446,6 +542,12 @@ void NoForwardingProcessor::run(int cycles) {
                 if (opcode == 0x63 || opcode == 0x67 || opcode == 0x6F) {
                     branchTaken = handleBranchAndJump(opcode, instruction, rs1Value, 
                                                      imm, ifid.pc, rs2Value, branchTarget);
+                    if(!Imm_valid){
+                        std::cout<<"Invalid Immediate value"<<std::endl;
+                        std::cout<<"Instruction: "<<ifid.instructionString<<std::endl;
+                        std::cout<<"----------------------> Breaking the simulation"<<std::endl;
+                        return;
+                    }
                 }
                 
                 // For JAL and JALR, store PC+4 in register rd
@@ -466,7 +568,6 @@ void NoForwardingProcessor::run(int cycles) {
                 idex.instruction = ifid.instruction;
                 idex.instructionString = ifid.instructionString;
                 idex.isEmpty = false;
-                idex.isStalled = false;
                 if (idex.controls.regWrite && rd != 0) {                          
                     addRegisterUsage(rd);
                     std::cout << "         Marking register x" << rd << " as busy "<< " size: "<< regUsageTracker[rd].size() << std::endl;
@@ -474,7 +575,6 @@ void NoForwardingProcessor::run(int cycles) {
             }
             else {
                 stall = true;
-                ifid.isStalled = true;
                 idex.isEmpty = true;
                 std::cout << "         Hazard detected: Stalling pipeline." << std::endl;
                 if (rs1 != 0 && isRegisterUsedBy(rs1))
@@ -652,7 +752,13 @@ bool NoForwardingProcessor::evaluateBranchCondition(int32_t rs1Value, int32_t rs
 bool NoForwardingProcessor::handleBranchAndJump(uint32_t opcode, uint32_t instruction, int32_t rs1Value, 
                                               int32_t imm, int32_t pc, int32_t rs2Value, int32_t& branchTarget) {
     bool branchTaken = false;
-    
+    Imm_valid = true;
+    // ERROR Check if wrong imm value is being used
+    if (imm%4 != 0){
+        std::cout << "ERROR: Incorrect immediate value: " << imm << std::endl;
+        Imm_valid = false;
+        return false;
+    }
     if (opcode == 0x63) {  // Branch
         uint32_t funct3 = (instruction >> 12) & 0x7;
         bool condition = evaluateBranchCondition(rs1Value, rs2Value, funct3);
@@ -672,14 +778,9 @@ bool NoForwardingProcessor::handleBranchAndJump(uint32_t opcode, uint32_t instru
         std::cout << "         JAL: Jump to PC: " << branchTarget << std::endl;
     }
     else if (opcode == 0x67) {  // JALR
-        if (imm%4==0){
             branchTaken = true;
             branchTarget = (rs1Value + imm) ; // Clear least significant bit per spec
-        }
-        else {
-            std::cout << " Wrong Imm"<<std::endl;
-        }
-        std::cout << "-> Return register data " << rs1Value << "         JALR: Jump to PC: " << branchTarget << std::endl;
+            std::cout << "-> Return register data " << rs1Value << "         JALR: Jump to PC: " << branchTarget << std::endl;
     }
     
     return branchTaken;

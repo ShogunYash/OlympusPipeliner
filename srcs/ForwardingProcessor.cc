@@ -20,13 +20,10 @@ void ForwardingProcessor::run(int cycles) {
     pc = 0;
     stall = false;
     ifid.isEmpty = true;
-    ifid.isStalled = false;
     idex.isEmpty = true;
-    idex.isStalled = false;
     exmem.isEmpty = true;
-    exmem.isStalled = false;
     memwb.isEmpty = true;
-    
+    Imm_valid = true;
     // Allocate the pipeline matrix.
     matrixRows = static_cast<int>(instructionStrings.size());
     matrixCols = cycles;
@@ -119,10 +116,13 @@ void ForwardingProcessor::run(int cycles) {
             memwb.instructionString = exmem.instructionString;
             memwb.isEmpty = false;
             // Adding forwarding logic when load instructions are used
-            if (memwb.controls.memToReg && memwb.rd != 0 && memwb.controls.regWrite) {
+            if (memwb.controls.memToReg && memwb.rd != 0 && memwb.controls.regWrite ) {
                 int32_t writeData = memwb.readData;
                 registers.write(memwb.rd, writeData);
-                // clearRegisterUsage(memwb.rd);
+                // get opcodes for branches and jumps
+                // uint32_t opcode = memwb.instruction & 0x7F;
+                // if (!(opcode == 0x6F || opcode == 0x67 || opcode == 0x63)) 
+                //     clearRegisterUsage(memwb.rd);
                 std::cout << "         Written " << writeData << " to register x" << memwb.rd << std::endl;
             }
         }
@@ -148,6 +148,11 @@ void ForwardingProcessor::run(int cycles) {
                 exmem.aluResult = idex.pc + idex.imm;
                 std::cout << "         AUIPC: PC + imm = " << exmem.aluResult << std::endl;
             }
+            // Add special case for LUI
+            else if (opcode == 0x37) { // LUI
+                exmem.aluResult = idex.imm;
+                std::cout << "         LUI: imm = " << exmem.aluResult << std::endl;
+            }
             // For JALR and JAL, override the ALU result
             else if (opcode == 0x67 || opcode == 0x6F) {
                 exmem.aluResult = idex.aluResult;
@@ -157,6 +162,13 @@ void ForwardingProcessor::run(int cycles) {
             else {
                 exmem.aluResult = executeALU(aluOp1, aluOp2, idex.controls.aluOp);
             }
+            
+            // Debug output for XORI instruction
+            if (opcode == 0x13 && ((idex.instruction >> 12) & 0x7) == 0x5) {
+                std::cout << "         XORI operation: " << aluOp1 << " ^ " << aluOp2
+                         << " = " << exmem.aluResult << " (ALU op: " << idex.controls.aluOp << ")" << std::endl;
+            }
+            
             std::cout << "         ALU operation result: " << exmem.aluResult << std::endl;
             
             exmem.pc = idex.pc;
@@ -171,7 +183,9 @@ void ForwardingProcessor::run(int cycles) {
             if (exmem.controls.regWrite && exmem.rd != 0 && !exmem.controls.memToReg) {
                 int32_t writeData = exmem.aluResult;
                 registers.write(exmem.rd, writeData);
-                // clearRegisterUsage(exmem.rd);
+                // // get opcodes for branches and jumps
+                // if (!(opcode == 0x6F || opcode == 0x67 || opcode == 0x63)) 
+                //     clearRegisterUsage(exmem.rd);
                 std::cout << "         Written " << writeData << " to register x" << exmem.rd << std::endl;
             }
         }
@@ -198,36 +212,29 @@ void ForwardingProcessor::run(int cycles) {
             int32_t rs1Value = registers.read(rs1);
             int32_t rs2Value = registers.read(rs2);
             
+            // use opcode to find whether the instruction is a branch or jump
+            if (!(opcode==0x67 || opcode==0x63 || opcode== 0x6F)) {
+                // Updating register usage for Ex and Mem stage for forwarding and not for branch/jump instructions
+                if(!exmem.isEmpty && exmem.controls.regWrite && exmem.rd != 0 && !exmem.controls.memToReg)
+                    clearRegisterUsage(exmem.rd);
+                if(!memwb.isEmpty && memwb.controls.memToReg && memwb.rd != 0 && memwb.controls.regWrite)
+                    clearRegisterUsage(memwb.rd);
+            }
             // More precise hazard detection based on instruction type
             bool hazard = false;
-            
-            // Instructions with no source register dependencies
-            if (opcode == 0x6F || // JAL
-                opcode == 0x37 || // LUI
-                opcode == 0x17) { // AUIPC
-                // No source registers used, no hazard possible
-                hazard = false;
-            }
-            // Instructions with only rs1 dependency
-            else if (opcode == 0x67 || // JALR
-                     opcode == 0x03 || // LOAD
-                     opcode == 0x13) { // I-type ALU
-                // Only check rs1 for hazard
-                hazard = (rs1 != 0 && isRegisterUsedBy(rs1));
-            }
-            // Instructions with both rs1 and rs2 dependencies
-            else if (opcode == 0x33 || // R-type ALU
-                     opcode == 0x23 || // STORE
-                     opcode == 0x63) { // BRANCH
-                // Check both rs1 and rs2 for hazards
-                hazard = ((rs1 != 0 && isRegisterUsedBy(rs1)) || (rs2 != 0 && isRegisterUsedBy(rs2)));
-            }
+            hazard = detect_hazard(hazard, opcode, rs1, rs2);
 
             if (!hazard) {
                 // Calculate branch or jump target in ID stage if applicable
                 if (opcode == 0x63 || opcode == 0x67 || opcode == 0x6F) {
                     branchTaken = handleBranchAndJump(opcode, instruction, rs1Value, 
                                                      imm, ifid.pc, rs2Value, branchTarget);
+                    if(!Imm_valid){
+                        std::cout<<"Invalid Immediate value"<<std::endl;
+                        std::cout<<"Instruction: "<<ifid.instructionString<<std::endl;
+                        std::cout<<"----------------------> Breaking the simulation"<<std::endl;
+                        return;
+                    }
                 }
                 
                 // For JAL and JALR, store PC+4 in register rd
@@ -248,7 +255,6 @@ void ForwardingProcessor::run(int cycles) {
                 idex.instruction = ifid.instruction;
                 idex.instructionString = ifid.instructionString;
                 idex.isEmpty = false;
-                idex.isStalled = false;
                 if (idex.controls.regWrite && rd != 0) {                          
                     addRegisterUsage(rd);
                     std::cout << "         Marking register x" << rd << " as busy "<< " size: "<< regUsageTracker[rd].size() << std::endl;
@@ -256,7 +262,6 @@ void ForwardingProcessor::run(int cycles) {
             }
             else {
                 stall = true;
-                ifid.isStalled = true;
                 idex.isEmpty = true;
                 std::cout << "         Hazard detected: Stalling pipeline." << std::endl;
                 if (rs1 != 0 && isRegisterUsedBy(rs1))
@@ -271,6 +276,15 @@ void ForwardingProcessor::run(int cycles) {
             std::cout << "Cycle " << cycle << " - ID: No instruction" << std::endl;
         }
         
+        // Updating register usage for Ex and Mem stage for forwarding and branch/jump instructions
+        uint32_t opcode =  ifid.instruction & 0x7F;
+        if(opcode == 0x67 || opcode == 0x63 || opcode == 0x6F) {
+            if(!exmem.isEmpty && exmem.controls.regWrite && exmem.rd != 0 && !exmem.controls.memToReg){
+                clearRegisterUsage(exmem.rd);
+            }
+            if(!memwb.isEmpty && memwb.controls.memToReg && memwb.rd != 0 && memwb.controls.regWrite)
+                clearRegisterUsage(memwb.rd);
+        }
         // -------------------- IF Stage --------------------
         std::cout << "Stall: " << stall << "; pc: " << pc << "; instructionMemory.size(): " << instructionMemory.size() << std::endl;
         if (!stall && (pc / 4 < static_cast<int32_t>(instructionMemory.size()))) {  // Adjusted for signed pc
@@ -278,7 +292,6 @@ void ForwardingProcessor::run(int cycles) {
             ifid.pc = pc;
             ifid.instructionString = instructionStrings[pc / 4];
             ifid.isEmpty = false;
-            ifid.isStalled = false;
             int idx = getInstructionIndex(ifid.pc);
             if (idx != -1)
                 recordStage(idx, cycle, IF);
@@ -298,13 +311,6 @@ void ForwardingProcessor::run(int cycles) {
         
         // -------------------- End-of-Cycle Processing --------------------
 
-        // Updating register usage for Ex and Mem stage for forwarding
-        if(!exmem.isEmpty && exmem.controls.regWrite && exmem.rd != 0 && !exmem.controls.memToReg){
-
-            clearRegisterUsage(exmem.rd);
-        }
-        if(!memwb.isEmpty && memwb.controls.memToReg && memwb.rd != 0 && memwb.controls.regWrite)
-            clearRegisterUsage(memwb.rd);
 
         if (branchTaken) {
             pc = branchTarget;
@@ -314,7 +320,6 @@ void ForwardingProcessor::run(int cycles) {
         }
         if (stall) {
             stall = false;
-            ifid.isStalled = false;
         }
         
         std::cout << "========== Ending Cycle " << cycle << " ==========" << std::endl << std::endl;
