@@ -1,17 +1,9 @@
 # OlympusPipeliner: RISC-V Pipelined Processor Simulator
 
 ## Project Overview
-OlympusPipeliner is a comprehensive RISC-V pipeline processor simulator that offers both forwarding and non-forwarding modes. This educational tool visualizes pipeline execution stages and data hazards, helping students understand the intricacies of modern processor design.
+OlympusPipeliner is a comprehensive RISC-V pipeline processor simulator that offers both forwarding and non-forwarding modes.
 
 ## Architecture Design
-
-### Pipeline Structure
-The processor implements the classic 5-stage RISC-V pipeline:
-- **IF (Instruction Fetch)**: Retrieves instructions from memory
-- **ID (Instruction Decode)**: Decodes instructions, reads registers
-- **EX (Execute)**: Performs ALU operations, address calculations
-- **MEM (Memory Access)**: Reads/writes data memory
-- **WB (Write Back)**: Writes results back to registers
 
 ### Core Components
 - **Register File**: 32 general-purpose registers (x0-x31)
@@ -22,10 +14,13 @@ The processor implements the classic 5-stage RISC-V pipeline:
 
 ## Design Decisions
 
+### 0. Register and Memory intialisation
+- We have designed such that the register and memory can take values and all have been intialized to 0
+
 ### 1. Early Branch Resolution
 - Branch targets are calculated in the **ID stage** rather than EX
 - Benefits:
-  - Reduces branch penalties from 3 cycles to 1 cycle
+  - Reduces branch penalties reduce by one 
   - Minimizes pipeline flushes
   - Branch conditions evaluated with freshly read register values
 - Implementation details:
@@ -81,6 +76,12 @@ The processor implements the classic 5-stage RISC-V pipeline:
   - I-type, S-type, B-type, U-type, and J-type instructions
 - Supports the full range of immediate values with correct sign extension
 
+### 8. Unsigned and signed int usage
+- The register can store negative values so it is signed 
+- The register memory address is only non negative values as address is non negative so we have used unsigned to handle more range of values in the same amount of memory.
+
+
+
 ## Implementation Challenges
 
 ### 1. Correct Branch Handling
@@ -125,7 +126,8 @@ The processor implements the classic 5-stage RISC-V pipeline:
   - Register and memory state tracking
   - Comprehensive test programs for different scenarios
 
-
+## Known Issues 
+- **No assumptions have been made and actual register processing has been simulated to mirror actual RIPES(actually better than ripes as ours does branch resolution in ID) and no Known Issues of now correctly giving output to all the examples(we took float as int in programs requiring it , as told in piazza post to not implement floating point calculation) mentioned in https://marz.utk.edu/my-courses/cosc230/book/example-risc-v-assembly-programs/**
 
 ### Building the Project
 ```
