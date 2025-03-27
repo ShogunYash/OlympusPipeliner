@@ -46,7 +46,7 @@ def process_input_files(input_dir, src_dir, output_dir):
             base_filename = os.path.splitext(filename)[0]
             
             # Clear previous output files that might conflict
-            for old_file in glob.glob(f"{output_dir}/{base_filename}_*_out.csv"):
+            for old_file in glob.glob(f"{output_dir}/{base_filename}_*_out.txt"):
                 os.remove(old_file)
             
             # Run forward executable with full path to output directory
@@ -68,9 +68,9 @@ def process_input_files(input_dir, src_dir, output_dir):
                 
                 # Check multiple potential output locations
                 possible_paths = [
-                    os.path.join(output_dir, f"{base_filename}_forward_out.csv"),
-                    os.path.join(script_dir, "outputfiles", f"{base_filename}_forward_out.csv"),
-                    os.path.join(os.path.dirname(script_dir), "outputfiles", f"{base_filename}_forward_out.csv")
+                    os.path.join(output_dir, f"{base_filename}_forward_out.txt"),
+                    os.path.join(script_dir, "outputfiles", f"{base_filename}_forward_out.txt"),
+                    os.path.join(os.path.dirname(script_dir), "outputfiles", f"{base_filename}_forward_out.txt")
                 ]
                 
                 found_path = None
@@ -81,9 +81,9 @@ def process_input_files(input_dir, src_dir, output_dir):
                 
                 if found_path:
                     # If found but not in the desired location, copy it there
-                    if found_path != os.path.join(output_dir, f"{base_filename}_forward_out.csv"):
+                    if found_path != os.path.join(output_dir, f"{base_filename}_forward_out.txt"):
                         import shutil
-                        target_path = os.path.join(output_dir, f"{base_filename}_forward_out.csv")
+                        target_path = os.path.join(output_dir, f"{base_filename}_forward_out.txt")
                         shutil.copy2(found_path, target_path)
                         print(f"Found output at {found_path}, copied to {target_path}")
                     else:
@@ -113,9 +113,9 @@ def process_input_files(input_dir, src_dir, output_dir):
                 time.sleep(1)
                 
                 possible_paths = [
-                    os.path.join(output_dir, f"{base_filename}_no_forward_out.csv"),
-                    os.path.join(script_dir, "outputfiles", f"{base_filename}_no_forward_out.csv"),
-                    os.path.join(os.path.dirname(script_dir), "outputfiles", f"{base_filename}_no_forward_out.csv")
+                    os.path.join(output_dir, f"{base_filename}_no_forward_out.txt"),
+                    os.path.join(script_dir, "outputfiles", f"{base_filename}_no_forward_out.txt"),
+                    os.path.join(os.path.dirname(script_dir), "outputfiles", f"{base_filename}_no_forward_out.txt")
                 ]
                 
                 found_path = None
@@ -125,9 +125,9 @@ def process_input_files(input_dir, src_dir, output_dir):
                         break
                 
                 if found_path:
-                    if found_path != os.path.join(output_dir, f"{base_filename}_no_forward_out.csv"):
+                    if found_path != os.path.join(output_dir, f"{base_filename}_no_forward_out.txt"):
                         import shutil
-                        target_path = os.path.join(output_dir, f"{base_filename}_no_forward_out.csv")
+                        target_path = os.path.join(output_dir, f"{base_filename}_no_forward_out.txt")
                         shutil.copy2(found_path, target_path)
                         print(f"Found output at {found_path}, copied to {target_path}")
                     else:
