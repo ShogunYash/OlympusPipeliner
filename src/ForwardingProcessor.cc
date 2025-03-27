@@ -215,11 +215,11 @@ void ForwardingProcessor::run(int cycles) {
             
             // use opcode to find whether the instruction is a branch or jump
             clear = false;
-            bool rs1UsedEX = (rs1 == exmem.rd && exmem.controls.regWrite && exmem.rd != 0 && !exmem.controls.memToReg);
-            bool rs1UsedMEM = (rs1 == memwb.rd && exmem.controls.memToReg && rs1!=0);
-            bool rs2UsedEX = (rs2 == exmem.rd && exmem.controls.regWrite && exmem.rd != 0 && !exmem.controls.memToReg);
-            bool rs2UsedMEM = (rs2 == memwb.rd && exmem.controls.memToReg && rs2!=0);
-            clear = (opcode == 0x67 &&( rs1UsedEX || rs1UsedMEM)) || (opcode == 0x63 && (rs1UsedEX || rs1UsedMEM || rs2UsedEX || rs2UsedMEM));
+            bool rs1UsedEX = (!exmem.isEmpty && rs1 == exmem.rd && exmem.controls.regWrite && exmem.rd != 0 && !exmem.controls.memToReg);
+            bool rs1UsedMEM = (!memwb.isEmpty && rs1 == memwb.rd && exmem.controls.memToReg && rs1!=0);
+            bool rs2UsedEX = (!exmem.isEmpty && rs2 == exmem.rd && exmem.controls.regWrite && exmem.rd != 0 && !exmem.controls.memToReg);
+            bool rs2UsedMEM = (!memwb.isEmpty && rs2 == memwb.rd && exmem.controls.memToReg && rs2!=0);
+            clear = ((opcode == 0x67 &&( rs1UsedEX || rs1UsedMEM)) || (opcode == 0x63 && (rs1UsedEX || rs1UsedMEM || rs2UsedEX || rs2UsedMEM)));
             if (!clear) {
                 // Updating register usage for Ex and Mem stage for forwarding and not for branch/jump instructions
                 if(!exmem.isEmpty && exmem.controls.regWrite && exmem.rd != 0 && !exmem.controls.memToReg){

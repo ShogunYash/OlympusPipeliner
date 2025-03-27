@@ -7,10 +7,10 @@ import time
 
 def process_input_files(input_dir, src_dir, output_dir):
     """
-    Process all .txt input files using forward and noforward executables.
+    Process all .csv input files using forward and noforward executables.
     
     Args:
-    input_dir (str): Directory containing input .txt files
+    input_dir (str): Directory containing input .csv files
     src_dir (str): Directory containing executables
     output_dir (str): Directory to store output files
     """
@@ -39,14 +39,14 @@ def process_input_files(input_dir, src_dir, output_dir):
         print(f"Error: noforward executable not found in {src_dir}")
         sys.exit(1)
     
-    # Process each .txt file
+    # Process each .csv file
     for filename in os.listdir(input_dir):
         if filename.endswith('.txt'):
             input_file_path = os.path.join(input_dir, filename)
             base_filename = os.path.splitext(filename)[0]
             
             # Clear previous output files that might conflict
-            for old_file in glob.glob(f"{output_dir}/{base_filename}_*_out.txt"):
+            for old_file in glob.glob(f"{output_dir}/{base_filename}_*_out.csv"):
                 os.remove(old_file)
             
             # Run forward executable with full path to output directory
@@ -68,9 +68,9 @@ def process_input_files(input_dir, src_dir, output_dir):
                 
                 # Check multiple potential output locations
                 possible_paths = [
-                    os.path.join(output_dir, f"{base_filename}_forward_out.txt"),
-                    os.path.join(script_dir, "outputfiles", f"{base_filename}_forward_out.txt"),
-                    os.path.join(os.path.dirname(script_dir), "outputfiles", f"{base_filename}_forward_out.txt")
+                    os.path.join(output_dir, f"{base_filename}_forward_out.csv"),
+                    os.path.join(script_dir, "outputfiles", f"{base_filename}_forward_out.csv"),
+                    os.path.join(os.path.dirname(script_dir), "outputfiles", f"{base_filename}_forward_out.csv")
                 ]
                 
                 found_path = None
@@ -81,9 +81,9 @@ def process_input_files(input_dir, src_dir, output_dir):
                 
                 if found_path:
                     # If found but not in the desired location, copy it there
-                    if found_path != os.path.join(output_dir, f"{base_filename}_forward_out.txt"):
+                    if found_path != os.path.join(output_dir, f"{base_filename}_forward_out.csv"):
                         import shutil
-                        target_path = os.path.join(output_dir, f"{base_filename}_forward_out.txt")
+                        target_path = os.path.join(output_dir, f"{base_filename}_forward_out.csv")
                         shutil.copy2(found_path, target_path)
                         print(f"Found output at {found_path}, copied to {target_path}")
                     else:
@@ -113,9 +113,9 @@ def process_input_files(input_dir, src_dir, output_dir):
                 time.sleep(1)
                 
                 possible_paths = [
-                    os.path.join(output_dir, f"{base_filename}_no_forward_out.txt"),
-                    os.path.join(script_dir, "outputfiles", f"{base_filename}_no_forward_out.txt"),
-                    os.path.join(os.path.dirname(script_dir), "outputfiles", f"{base_filename}_no_forward_out.txt")
+                    os.path.join(output_dir, f"{base_filename}_no_forward_out.csv"),
+                    os.path.join(script_dir, "outputfiles", f"{base_filename}_no_forward_out.csv"),
+                    os.path.join(os.path.dirname(script_dir), "outputfiles", f"{base_filename}_no_forward_out.csv")
                 ]
                 
                 found_path = None
@@ -125,9 +125,9 @@ def process_input_files(input_dir, src_dir, output_dir):
                         break
                 
                 if found_path:
-                    if found_path != os.path.join(output_dir, f"{base_filename}_no_forward_out.txt"):
+                    if found_path != os.path.join(output_dir, f"{base_filename}_no_forward_out.csv"):
                         import shutil
-                        target_path = os.path.join(output_dir, f"{base_filename}_no_forward_out.txt")
+                        target_path = os.path.join(output_dir, f"{base_filename}_no_forward_out.csv")
                         shutil.copy2(found_path, target_path)
                         print(f"Found output at {found_path}, copied to {target_path}")
                     else:
