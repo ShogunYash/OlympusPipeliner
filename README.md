@@ -14,8 +14,10 @@ OlympusPipeliner is a comprehensive RISC-V pipeline processor simulator that off
 
 ## Design Decisions
 
-### 1. Register and Memory intialisation
-- We have designed such that the register and memory can take values and all have been intialized to 0
+### 1. Register and Memory 
+```
+We have designed such that the register and memory can take input values and all have been intialized to 0
+```
 
 ### 2. Early Branch Resolution
 - Branch targets are calculated in the **ID stage** rather than EX
@@ -38,21 +40,21 @@ OlympusPipeliner is a comprehensive RISC-V pipeline processor simulator that off
 
 ### 4. 3D Pipeline Visualization
 - Traditional pipeline diagrams show only one stage per instruction per cycle
-- Our implementation uses a 3D matrix representation:
-  - Multiple pipeline stages can be active for the same instruction in one cycle
-  - Shows advanced behaviors like stalls and flushes
+```
+- Our implementation uses a 3D matrix representation
+- Multiple pipeline stages can be active for the same instruction in one cycle resulting in the printing of Multiple stages per cell separated by slashes
+
 - Output format:
-  - CSV file with cycle-by-cycle pipeline state
-  - Multiple stages per cell separated by slashes when needed
+  - We have added functionality to produce a CSV file with cycle-by-cycle pipeline state for an aesthetic look, but default is to produce a .txt file matching the format of autograder
+```
+  
 
 ### 5. Data Forwarding Implementation
 - The `ForwardingProcessor` class extends the base processor to implement forwarding:
   - Detects data dependencies between instructions
   - Forwards results directly from EX/MEM and MEM/WB stages
   - Minimizes stalls due to data hazards
-- Forwarding sources:
-  - EX/MEM stage: Most recent result, highest priority
-  - MEM/WB stage: Second priority if needed
+- All the functions from the non-forwarding implementation was reused except the run function which was overriden to implement forwarding logic by writing to register in that stage itself(EX or MEM) adn
 
 ### 6. Specialized Memory Access
 - Support for various memory access types:
@@ -66,9 +68,6 @@ OlympusPipeliner is a comprehensive RISC-V pipeline processor simulator that off
 - Even with forwarding, load-use hazards require special handling:
   - Data from memory load isn't available until MEM stage
   - Stall inserted when load result needed by next instruction
-- Implementation:
-  - Special detection condition in ID stage
-  - Pipeline stalled for exactly one cycle
 
 ### 8. Immediate Extraction Logic
 - RISC-V has multiple immediate encoding formats
@@ -79,6 +78,10 @@ OlympusPipeliner is a comprehensive RISC-V pipeline processor simulator that off
 ### 9. Unsigned and signed int usage
 - The register can store negative values so it is signed 
 - The register memory address is only non negative values as address is non negative so we have used unsigned to handle more range of values in the same amount of memory.
+
+### 10. Processing of Instructions cycle-by-cycle
+- By handling the instructions one cycle after another such as first updating the WB latches and functions of WB before moving on to MEM stage helps us in easy extension of non-forwarding to forwarding processor(only an extra 20 lines of code)
+-
 
 
 
