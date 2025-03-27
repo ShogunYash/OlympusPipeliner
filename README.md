@@ -54,7 +54,9 @@ We have designed such that the register and memory can take input values and all
   - Detects data dependencies between instructions
   - Forwards results directly from EX/MEM and MEM/WB stages
   - Minimizes stalls due to data hazards
-- All the functions from the non-forwarding implementation was reused except the run function which was overriden to implement forwarding logic by writing to register in that stage itself(EX or MEM) adn
+```
+- All the functions from the non-forwarding implementation was reused except the run function which was overriden to implement forwarding logic by writing to register in that stage itself(EX or MEM) and then freeing it except for when the instr in branches which is updated only in the next cycle
+```
 
 ### 6. Specialized Memory Access
 - Support for various memory access types:
@@ -80,8 +82,9 @@ We have designed such that the register and memory can take input values and all
 - The register memory address is only non negative values as address is non negative so we have used unsigned to handle more range of values in the same amount of memory.
 
 ### 10. Processing of Instructions cycle-by-cycle
-- By handling the instructions one cycle after another such as first updating the WB latches and functions of WB before moving on to MEM stage helps us in easy extension of non-forwarding to forwarding processor(only an extra 20 lines of code)
--
+```
+By handling the instructions one cycle after another such as first updating the WB latches and functions of WB before moving on to MEM stage helps us in easy extension of non-forwarding to forwarding processor(only an extra 20 lines of code)
+```
 
 
 
@@ -99,7 +102,7 @@ We have designed such that the register and memory can take input values and all
 - **Solution**:
   In non-forwarding mode: conservative approach using register usage tracking
   - In forwarding mode: precise identification of dependencies between instructions
-  - Special handling for load-use hazards that can't be solved with forwarding -
+  - Special handling for load-use hazards that can't be solved with forwarding and also branch instructions that were dependent on the previous instruction
 
 ### 3. Pipeline Visualization
 - **Challenge**: Representing complex pipeline states clearly
@@ -125,19 +128,22 @@ We have designed such that the register and memory can take input values and all
 ### 6. Testing and Debugging
 - **Challenge**: Ensuring correct execution across various instruction sequences
 - **Solution**:
+  - Used output format of .csv for clear visualisation and easy verification with peers and ripes
   - Detailed cycle-by-cycle output showing all pipeline stages
   - Register and memory state tracking
   - Comprehensive test programs for different scenarios
 
 ## Known Issues 
-- **No assumptions have been made and actual register processing has been simulated to mirror actual RIPES(actually better than ripes as ours does branch resolution in ID) and no Known Issues of now correctly giving output to all the examples(we took float as int in programs requiring it , as told in piazza post to not implement floating point calculation) mentioned in https://marz.utk.edu/my-courses/cosc230/book/example-risc-v-assembly-programs/**
+```
+ No assumptions have been made and actual register processing has been simulated to mirror actual RIPES(actually better than ripes as ours does branch resolution in ID) and no Known Issues of now correctly giving output to all the examples(we took float as int in programs requiring it , as told in piazza post to not implement floating point calculation) mentioned in https://marz.utk.edu/my-courses/cosc230/book/example-risc-v-assembly-programs/
+```
 - la instruction was given in the examples website, but as that is a pseudo instruction we haven't supported it 
 
-### Building the Project
-```
+
 
 ## Sources Used
 - RISC-V Specifications: https://riscv.org/specifications/
 - Computer Organization and Design RISC-V Edition: The Hardware Software Interface by David A. Patterson and John L. Hennessy
 - Various online resources and academic papers on pipeline processor design
+- Chatgpt for code regarding Machine code conversion to opcode,rs1,etc
 
